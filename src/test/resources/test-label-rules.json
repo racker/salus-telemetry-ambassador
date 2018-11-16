@@ -1,0 +1,22 @@
+{
+  "mappings": {
+    "os": {
+      "MACOS": "DARWIN"
+    },
+    "arch": {
+      "386": "X86",
+      "AMD64": "X86_64"
+    }
+  },
+  "constrain": {
+    "os": [
+      "DARWIN",
+      "LINUX",
+      "WINDOWS"
+    ],
+    "arch": [
+      "X86",
+      "X86_64"
+    ]
+  }
+}

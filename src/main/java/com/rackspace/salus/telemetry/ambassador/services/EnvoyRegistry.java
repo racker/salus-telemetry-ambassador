@@ -1,0 +1,221 @@
+/*
+ *    Copyright 2018 Rackspace US, Inc.
+ *
+ *    Licensed under the Apache License, Version 2.0 (the "License");
+ *    you may not use this file except in compliance with the License.
+ *    You may obtain a copy of the License at
+ *
+ *        http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *    Unless required by applicable law or agreed to in writing, software
+ *    distributed under the License is distributed on an "AS IS" BASIS,
+ *    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *    See the License for the specific language governing permissions and
+ *    limitations under the License.
+ *
+ *
+ */
+
+package com.rackspace.salus.telemetry.ambassador.services;
+
+import com.google.protobuf.InvalidProtocolBufferException;
+import com.google.protobuf.util.JsonFormat;
+import com.rackspace.salus.services.TelemetryEdge;
+import com.rackspace.salus.telemetry.ambassador.config.AmbassadorProperties;
+import com.rackspace.salus.telemetry.etcd.services.EnvoyLabelManagement;
+import com.rackspace.salus.telemetry.etcd.services.EnvoyLeaseTracking;
+import io.grpc.Status;
+import io.grpc.StatusException;
+import io.grpc.StatusRuntimeException;
+import io.grpc.stub.StreamObserver;
+import java.net.SocketAddress;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
+import lombok.Data;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
+
+@Service
+@Slf4j
+public class EnvoyRegistry {
+
+    private final AmbassadorProperties appProperties;
+    private final EnvoyLabelManagement envoyLabelManagement;
+    private final EnvoyLeaseTracking envoyLeaseTracking;
+    private final LabelRulesProcessor labelRulesProcessor;
+    private final JsonFormat.Printer jsonPrinter;
+
+    @Data
+    static class EnvoyEntry {
+        final StreamObserver<TelemetryEdge.EnvoyInstruction> instructionStream;
+        final Map<String,String> labels;
+    }
+
+    private ConcurrentHashMap<String, EnvoyEntry> envoys = new ConcurrentHashMap<>();
+
+    @SuppressWarnings("SpringJavaInjectionPointsAutowiringInspection")
+    @Autowired
+    public EnvoyRegistry(AmbassadorProperties appProperties,
+                         EnvoyLabelManagement envoyLabelManagement,
+                         EnvoyLeaseTracking envoyLeaseTracking,
+                         LabelRulesProcessor labelRulesProcessor,
+                         JsonFormat.Printer jsonPrinter) {
+        this.appProperties = appProperties;
+        this.envoyLabelManagement = envoyLabelManagement;
+        this.envoyLeaseTracking = envoyLeaseTracking;
+        this.labelRulesProcessor = labelRulesProcessor;
+        this.jsonPrinter = jsonPrinter;
+    }
+
+    public void attach(String tenantId, TelemetryEdge.EnvoySummary envoySummary,
+                       SocketAddress remoteAddr, StreamObserver<TelemetryEdge.EnvoyInstruction> instructionStreamObserver) {
+        final String instanceId = envoySummary.getInstanceId();
+
+        if (StringUtils.isEmpty(instanceId)) {
+            log.warn("Envoy attachment from remoteAddr={} is missing tenantId", remoteAddr);
+            instructionStreamObserver.onError(new StatusException(Status.INVALID_ARGUMENT));
+        }
+
+        final Map<String, String> envoyLabels = labelRulesProcessor.process(envoySummary.getLabelsMap());
+        final List<String> supportedAgentTypes = convertToStrings(envoySummary.getSupportedAgentsList());
+
+        log.info("Attaching envoy tenantId={}, instanceId={} from remoteAddr={} with labels={}, supports agents={}",
+            tenantId, instanceId, remoteAddr, envoyLabels, supportedAgentTypes);
+
+        envoyLeaseTracking.grant(instanceId)
+            .thenCompose(leaseId -> {
+
+                try {
+
+                    final String summaryAsJson = jsonPrinter.print(envoySummary);
+
+                    return envoyLabelManagement.registerAndSpreadEnvoy(
+                        tenantId, instanceId, summaryAsJson, leaseId,
+                        envoyLabels, supportedAgentTypes
+                    )
+                        .thenApply(o -> leaseId);
+
+                } catch (InvalidProtocolBufferException e) {
+                    throw new RuntimeException("Failed to encode envoy summary", e);
+                }
+
+            })
+            .handle((leaseId, throwable) -> {
+                if (throwable != null) {
+                    log.warn("Failed to spread envoy", throwable);
+                    instructionStreamObserver.onError(throwable);
+                } else {
+                    final EnvoyEntry previous = envoys.put(instanceId,
+                            new EnvoyEntry(instructionStreamObserver, envoyLabels)
+                            );
+
+                    if (previous != null) {
+                        log.warn("Saw re-attachment of same envoy id={}, so aborting the previous stream to solve race condition",
+                            instanceId);
+                        previous.instructionStream.onError(new StatusException(Status.ABORTED));
+
+                        envoyLeaseTracking.revoke(instanceId);
+                    }
+                }
+
+                return leaseId;
+            })
+            .thenCompose(leaseId ->
+                envoyLabelManagement.pullAgentInstallsForEnvoy(tenantId, instanceId, leaseId, supportedAgentTypes, envoyLabels)
+                    .thenApply(agentInstallCount -> {
+                        log.debug("Pulled agent installs count={} for tenant={}, envoy={}",
+                            agentInstallCount, tenantId, instanceId);
+                        return leaseId;
+                    })
+            )
+            .thenCompose(leaseId ->
+                envoyLabelManagement.pullConfigsForEnvoy(tenantId, instanceId, leaseId, supportedAgentTypes, envoyLabels)
+                .thenApply(configCount -> {
+                    log.debug("Pulled configs count={} for tenant={}, envoy={}",
+                        configCount, tenantId, instanceId);
+                    return leaseId;
+                })
+            );
+
+    }
+
+    public boolean keepAlive(String instanceId, SocketAddress remoteAddr) {
+        log.trace("Processing keep alive for instanceId={} from={}", instanceId, remoteAddr);
+
+        return envoyLeaseTracking.keepAlive(instanceId);
+    }
+
+    private List<String> convertToStrings(List<TelemetryEdge.AgentType> agentsList) {
+        return agentsList.stream()
+            .map(agentType -> agentType.name())
+            .collect(Collectors.toList());
+    }
+
+    @Scheduled(fixedDelayString = "${ambassador.envoyRefreshInterval:PT10S}")
+    public void refreshEnvoys() {
+
+        envoys.forEachKey(appProperties.getEnvoyRefreshParallelism(), instanceId -> {
+            final EnvoyEntry envoyEntry = envoys.get(instanceId);
+
+            if (envoyEntry != null) {
+                try {
+                    synchronized (envoyEntry.instructionStream) {
+                        envoyEntry.instructionStream.onNext(TelemetryEdge.EnvoyInstruction.newBuilder()
+                            .setRefresh(
+                                TelemetryEdge.EnvoyInstructionRefresh.newBuilder().build()
+                            )
+                            .build());
+                    }
+                } catch (StatusRuntimeException e) {
+                    processFailedSend(instanceId, e);
+                }
+            }
+        });
+    }
+
+    public void remove(String instanceId) {
+        envoys.remove(instanceId);
+        envoyLeaseTracking.revoke(instanceId);
+    }
+
+    private void processFailedSend(String instanceId, StatusRuntimeException e) {
+        log.info("Removing envoy stream for id={} due to status={}",
+            instanceId, e.getStatus());
+        remove(instanceId);
+    }
+
+    public boolean contains(String envoyInstanceId) {
+        return envoys.containsKey(envoyInstanceId);
+    }
+
+    public Map<String, String> getEnvoyLabels(String envoyInstanceId) {
+        final EnvoyEntry entry = envoys.get(envoyInstanceId);
+        return entry != null ? entry.labels : Collections.emptyMap();
+    }
+
+    public void sendInstruction(String envoyInstanceId, TelemetryEdge.EnvoyInstruction instruction) {
+        final EnvoyEntry envoyEntry = envoys.get(envoyInstanceId);
+
+        if (envoyEntry != null) {
+            log.debug("Sending instruction={} to envoyInstance={}",
+                instruction, envoyInstanceId);
+
+            try {
+                synchronized (envoyEntry.instructionStream) {
+                    envoyEntry.instructionStream.onNext(instruction);
+                }
+            } catch (StatusRuntimeException e) {
+                processFailedSend(envoyInstanceId, e);
+            }
+        } else {
+            log.warn("No observer stream for envoyInstance={}, needed for sending instruction={}",
+                envoyInstanceId, instruction);
+        }
+    }
+}

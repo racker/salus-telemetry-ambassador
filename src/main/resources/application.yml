@@ -1,0 +1,26 @@
+ambassador:
+  envoyRefreshInterval: PT10S
+  kafka-topics:
+    LOG:
+      telemetry.logs.json
+    METRIC:
+      telemetry.metrics.json
+etcd:
+  url: http://localhost:2479
+spring:
+  resources:
+    add-mappings: false
+management.endpoints.web.exposure.include: "health,jolokia,metrics"
+management:
+  metrics:
+    export:
+      statsd:
+        flavor: ${statsd.flavor:telegraf}
+        host: ${statsd.host:localhost}
+        port: ${statsd.port:8125}
+        enabled: ${statsd.enabled:false}
+      influx:
+        db: telemetry-ambassador
+        host: ${statsd.host:localhost}
+        port: ${statsd.port:8086}
+        enabled: ${influx.enabled:false}
