@@ -22,6 +22,7 @@ import com.rackspace.salus.model.AccountType;
 import com.rackspace.salus.model.ExternalMetric;
 import com.rackspace.salus.model.MonitoringSystem;
 import com.rackspace.salus.services.TelemetryEdge;
+import com.rackspace.salus.services.TelemetryEdge.PostedMetric;
 import com.rackspace.salus.telemetry.ambassador.types.KafkaMessageType;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -54,11 +55,10 @@ public class MetricRouter {
         universalTimestampFormatter = DateTimeFormatter.ISO_INSTANT;
     }
 
-    public void route(String tenantId, TelemetryEdge.PostedMetric postedMetric) {
+    public void route(String tenantId, String envoyId,
+        PostedMetric postedMetric) {
 
-        final String envoyInstanceId = postedMetric.getInstanceId();
-
-        final Map<String, String> envoyLabels = envoyRegistry.getEnvoyLabels(envoyInstanceId);
+        final Map<String, String> envoyLabels = envoyRegistry.getEnvoyLabels(envoyId);
         if (envoyLabels == null) {
             throw new IllegalArgumentException("Unable to find Envoy in the registry");
         }
@@ -76,7 +76,7 @@ public class MetricRouter {
             .setTimestamp(universalTimestampFormatter.format(timestamp))
             .setDeviceMetadata(envoyLabels)
             .setMonitoringSystem(MonitoringSystem.RMII)
-            .setSystemMetadata(Collections.singletonMap("envoyId", envoyInstanceId))
+            .setSystemMetadata(Collections.singletonMap("envoyId", envoyId))
             .setCollectionMetadata(nameTagValue.getTagsMap())
             .setCollectionName(nameTagValue.getName())
             .setFvalues(nameTagValue.getFvaluesMap())

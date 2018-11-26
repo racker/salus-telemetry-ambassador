@@ -22,7 +22,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.rackspace.salus.services.TelemetryEdge;
+import com.rackspace.salus.services.TelemetryEdge.LogEvent;
 import com.rackspace.salus.telemetry.ambassador.types.KafkaMessageType;
 import java.io.IOException;
 import java.util.Map;
@@ -47,8 +47,8 @@ public class LogEventRouter {
         this.kafkaEgress = kafkaEgress;
     }
 
-    public void route(String tenantId, TelemetryEdge.LogEvent request) {
-        final Map<String, String> labels = envoyRegistry.getEnvoyLabels(request.getInstanceId());
+    public void route(String tenantId, String envoyId, LogEvent request) {
+        final Map<String, String> labels = envoyRegistry.getEnvoyLabels(envoyId);
 
         try {
             final JsonNode event = objectMapper.readTree(request.getJsonContent());

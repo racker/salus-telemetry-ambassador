@@ -21,6 +21,8 @@ package com.rackspace.salus.telemetry.ambassador.services;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.util.JsonFormat;
 import com.rackspace.salus.services.TelemetryEdge;
+import com.rackspace.salus.services.TelemetryEdge.EnvoyInstruction;
+import com.rackspace.salus.services.TelemetryEdge.EnvoySummary;
 import com.rackspace.salus.telemetry.ambassador.config.AmbassadorProperties;
 import com.rackspace.salus.telemetry.etcd.services.EnvoyLabelManagement;
 import com.rackspace.salus.telemetry.etcd.services.EnvoyLeaseTracking;
@@ -73,11 +75,12 @@ public class EnvoyRegistry {
         this.jsonPrinter = jsonPrinter;
     }
 
-    public void attach(String tenantId, TelemetryEdge.EnvoySummary envoySummary,
-                       SocketAddress remoteAddr, StreamObserver<TelemetryEdge.EnvoyInstruction> instructionStreamObserver) {
-        final String instanceId = envoySummary.getInstanceId();
+    public void attach(String tenantId, String envoyId,
+        EnvoySummary envoySummary,
+        SocketAddress remoteAddr,
+        StreamObserver<EnvoyInstruction> instructionStreamObserver) {
 
-        if (StringUtils.isEmpty(instanceId)) {
+        if (StringUtils.isEmpty(envoyId)) {
             log.warn("Envoy attachment from remoteAddr={} is missing tenantId", remoteAddr);
             instructionStreamObserver.onError(new StatusException(Status.INVALID_ARGUMENT));
         }
@@ -85,10 +88,10 @@ public class EnvoyRegistry {
         final Map<String, String> envoyLabels = labelRulesProcessor.process(envoySummary.getLabelsMap());
         final List<String> supportedAgentTypes = convertToStrings(envoySummary.getSupportedAgentsList());
 
-        log.info("Attaching envoy tenantId={}, instanceId={} from remoteAddr={} with labels={}, supports agents={}",
-            tenantId, instanceId, remoteAddr, envoyLabels, supportedAgentTypes);
+        log.info("Attaching envoy tenantId={}, envoyId={} from remoteAddr={} with labels={}, supports agents={}",
+            tenantId, envoyId, remoteAddr, envoyLabels, supportedAgentTypes);
 
-        envoyLeaseTracking.grant(instanceId)
+        envoyLeaseTracking.grant(envoyId)
             .thenCompose(leaseId -> {
 
                 try {
@@ -96,7 +99,7 @@ public class EnvoyRegistry {
                     final String summaryAsJson = jsonPrinter.print(envoySummary);
 
                     return envoyLabelManagement.registerAndSpreadEnvoy(
-                        tenantId, instanceId, summaryAsJson, leaseId,
+                        tenantId, envoyId, summaryAsJson, leaseId,
                         envoyLabels, supportedAgentTypes
                     )
                         .thenApply(o -> leaseId);
@@ -111,34 +114,34 @@ public class EnvoyRegistry {
                     log.warn("Failed to spread envoy", throwable);
                     instructionStreamObserver.onError(throwable);
                 } else {
-                    final EnvoyEntry previous = envoys.put(instanceId,
+                    final EnvoyEntry previous = envoys.put(envoyId,
                             new EnvoyEntry(instructionStreamObserver, envoyLabels)
                             );
 
                     if (previous != null) {
                         log.warn("Saw re-attachment of same envoy id={}, so aborting the previous stream to solve race condition",
-                            instanceId);
+                            envoyId);
                         previous.instructionStream.onError(new StatusException(Status.ABORTED));
 
-                        envoyLeaseTracking.revoke(instanceId);
+                        envoyLeaseTracking.revoke(envoyId);
                     }
                 }
 
                 return leaseId;
             })
             .thenCompose(leaseId ->
-                envoyLabelManagement.pullAgentInstallsForEnvoy(tenantId, instanceId, leaseId, supportedAgentTypes, envoyLabels)
+                envoyLabelManagement.pullAgentInstallsForEnvoy(tenantId, envoyId, leaseId, supportedAgentTypes, envoyLabels)
                     .thenApply(agentInstallCount -> {
                         log.debug("Pulled agent installs count={} for tenant={}, envoy={}",
-                            agentInstallCount, tenantId, instanceId);
+                            agentInstallCount, tenantId, envoyId);
                         return leaseId;
                     })
             )
             .thenCompose(leaseId ->
-                envoyLabelManagement.pullConfigsForEnvoy(tenantId, instanceId, leaseId, supportedAgentTypes, envoyLabels)
+                envoyLabelManagement.pullConfigsForEnvoy(tenantId, envoyId, leaseId, supportedAgentTypes, envoyLabels)
                 .thenApply(configCount -> {
                     log.debug("Pulled configs count={} for tenant={}, envoy={}",
-                        configCount, tenantId, instanceId);
+                        configCount, tenantId, envoyId);
                     return leaseId;
                 })
             );
