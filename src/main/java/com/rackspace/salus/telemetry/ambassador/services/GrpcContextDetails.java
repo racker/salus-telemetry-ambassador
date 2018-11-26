@@ -46,6 +46,9 @@ import org.lognet.springboot.grpc.GRpcGlobalInterceptor;
  *   <li>Remote caller's address.
  *   An implementation of a service method can obtain this value from {@link #getCallerRemoteAddress()}.
  *   </li>
+ *   <li>Envoy ID. Each time an Envoy establishes a new connection to an Ambassador it
+ *   generates a unique, session-like ID and conveys that ID to all gRPC calls via the call headers.
+ *   </li>
  * </ul>
  */
 @GRpcGlobalInterceptor
