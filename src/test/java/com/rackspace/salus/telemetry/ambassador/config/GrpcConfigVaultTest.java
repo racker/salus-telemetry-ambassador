@@ -32,8 +32,10 @@ import com.rackspace.salus.services.TelemetryEdge;
 import com.rackspace.salus.telemetry.ambassador.MockAmbassadorService;
 import com.rackspace.salus.telemetry.ambassador.services.GrpcContextDetails;
 import io.grpc.ManagedChannel;
+import io.grpc.Metadata;
 import io.grpc.netty.GrpcSslContexts;
 import io.grpc.netty.NettyChannelBuilder;
+import io.grpc.stub.MetadataUtils;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.util.Iterator;
@@ -136,9 +138,15 @@ public class GrpcConfigVaultTest {
             .build();
 
         try {
-            // this client stub will let us interact like we're an Envoy
+            Metadata headers = new Metadata();
+            headers.put(
+                Metadata.Key.of(GrpcContextDetails.ENVOY_ID_HEADER, Metadata.ASCII_STRING_MARSHALLER),
+                "envoy-1");
             final TelemetryAmbassadorGrpc.TelemetryAmbassadorBlockingStub ambassadorClient =
-                TelemetryAmbassadorGrpc.newBlockingStub(channel);
+                MetadataUtils.attachHeaders(
+                    TelemetryAmbassadorGrpc.newBlockingStub(channel),
+                    headers
+                );
 
             mockAmbassadorService.addInstructionToProvide(
                 TelemetryEdge.EnvoyInstruction.newBuilder().build()
@@ -146,7 +154,6 @@ public class GrpcConfigVaultTest {
 
             final Iterator<TelemetryEdge.EnvoyInstruction> instructions = ambassadorClient.attachEnvoy(
                 TelemetryEdge.EnvoySummary.newBuilder()
-                    .setInstanceId("envoy-1")
                     .addSupportedAgents(TelemetryEdge.AgentType.TELEGRAF)
                     .putLabels("os", "linux")
                     .build()
@@ -158,8 +165,8 @@ public class GrpcConfigVaultTest {
             assertThat(attachCalls, Matchers.hasSize(1));
 
             assertThat(attachCalls.get(0).getTenantId(), equalTo("aaaaaa"));
+            assertThat(attachCalls.get(0).getEnvoyId(), equalTo("envoy-1"));
             final TelemetryEdge.EnvoySummary attachReq = attachCalls.get(0).getRequest();
-            assertThat(attachReq.getInstanceId(), equalTo("envoy-1"));
             assertThat(attachReq.getSupportedAgentsList(), contains(TelemetryEdge.AgentType.TELEGRAF));
             assertThat(attachReq.getLabelsMap(), hasEntry("os", "linux"));
 

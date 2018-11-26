@@ -67,10 +67,11 @@ public class EnvoyAmbassadorService extends TelemetryAmbassadorGrpc.TelemetryAmb
     @Override
     public void attachEnvoy(TelemetryEdge.EnvoySummary request, StreamObserver<TelemetryEdge.EnvoyInstruction> responseObserver) {
         final SocketAddress remoteAddr = GrpcContextDetails.getCallerRemoteAddress();
+        final String envoyId = GrpcContextDetails.getCallerEnvoyId();
 
-        registerCancelHandler(request.getInstanceId(), remoteAddr, responseObserver);
+        registerCancelHandler(envoyId, remoteAddr, responseObserver);
         envoyAttach.increment();
-        envoyRegistry.attach(GrpcContextDetails.getCallerTenantId(), request, remoteAddr, responseObserver);
+        envoyRegistry.attach(GrpcContextDetails.getCallerTenantId(), envoyId, request, remoteAddr, responseObserver);
     }
 
     private void registerCancelHandler(String instanceId, SocketAddress remoteAddr, StreamObserver<TelemetryEdge.EnvoyInstruction> responseObserver) {
@@ -92,9 +93,11 @@ public class EnvoyAmbassadorService extends TelemetryAmbassadorGrpc.TelemetryAmb
     @Override
     public void postLogEvent(TelemetryEdge.LogEvent request,
                              StreamObserver<TelemetryEdge.PostLogEventResponse> responseObserver) {
+        final String envoyId = GrpcContextDetails.getCallerEnvoyId();
+
         postLog.increment();
         try {
-            logEventRouter.route(GrpcContextDetails.getCallerTenantId(), request);
+            logEventRouter.route(GrpcContextDetails.getCallerTenantId(), envoyId, request);
             responseObserver.onNext(TelemetryEdge.PostLogEventResponse.newBuilder().build());
             responseObserver.onCompleted();
         } catch (Exception e) {
@@ -106,9 +109,11 @@ public class EnvoyAmbassadorService extends TelemetryAmbassadorGrpc.TelemetryAmb
     @Override
     public void postMetric(TelemetryEdge.PostedMetric request,
                            StreamObserver<TelemetryEdge.PostMetricResponse> responseObserver) {
+        final String envoyId = GrpcContextDetails.getCallerEnvoyId();
+
         messagesPost.increment();
         try {
-            metricRouter.route(GrpcContextDetails.getCallerTenantId(), request);
+            metricRouter.route(GrpcContextDetails.getCallerTenantId(), envoyId, request);
             responseObserver.onNext(TelemetryEdge.PostMetricResponse.newBuilder().build());
             responseObserver.onCompleted();
         } catch (Exception e) {
@@ -120,16 +125,16 @@ public class EnvoyAmbassadorService extends TelemetryAmbassadorGrpc.TelemetryAmb
     @Override
     public void keepAlive(TelemetryEdge.KeepAliveRequest request, StreamObserver<TelemetryEdge.KeepAliveResponse> responseObserver) {
         final SocketAddress remoteAddr = GrpcContextDetails.getCallerRemoteAddress();
-        final String instanceId = request.getInstanceId();
+        final String envoyId = GrpcContextDetails.getCallerEnvoyId();
 
         keepAlive.increment();
-        log.trace("Processing keep alive for instanceId={}", instanceId);
+        log.trace("Processing keep alive for envoyId={}", envoyId);
 
-        if (envoyRegistry.keepAlive(instanceId, remoteAddr)) {
+        if (envoyRegistry.keepAlive(envoyId, remoteAddr)) {
             responseObserver.onNext(TelemetryEdge.KeepAliveResponse.newBuilder().build());
             responseObserver.onCompleted();
         } else {
-            log.warn("Failed keep alive due to unknown instanceId={}", instanceId);
+            log.warn("Failed keep alive due to unknown envoyId={}", envoyId);
             responseObserver.onError(new StatusException(Status.INVALID_ARGUMENT));
         }
     }

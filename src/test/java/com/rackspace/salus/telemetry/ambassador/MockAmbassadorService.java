@@ -36,6 +36,7 @@ import org.springframework.context.annotation.Profile;
 public class MockAmbassadorService extends TelemetryAmbassadorGrpc.TelemetryAmbassadorImplBase {
     @Data
     public static class AttachCall {
+        final String envoyId;
         final String tenantId;
         final TelemetryEdge.EnvoySummary request;
     }
@@ -54,7 +55,11 @@ public class MockAmbassadorService extends TelemetryAmbassadorGrpc.TelemetryAmba
 
     @Override
     public void attachEnvoy(TelemetryEdge.EnvoySummary request, StreamObserver<TelemetryEdge.EnvoyInstruction> responseObserver) {
-        attachCalls.add(new AttachCall(GrpcContextDetails.getCallerTenantId(), request));
+        attachCalls.add(new AttachCall(
+            GrpcContextDetails.getCallerEnvoyId(),
+            GrpcContextDetails.getCallerTenantId(),
+            request
+        ));
 
         for (TelemetryEdge.EnvoyInstruction instruction : instructionsToProvide) {
             responseObserver.onNext(instruction);

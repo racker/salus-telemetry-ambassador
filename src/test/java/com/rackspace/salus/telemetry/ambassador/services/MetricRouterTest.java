@@ -65,7 +65,6 @@ public class MetricRouterTest {
             .thenReturn(envoyLabels);
 
         final TelemetryEdge.PostedMetric postedMetric = TelemetryEdge.PostedMetric.newBuilder()
-            .setInstanceId("envoy-1")
             .setMetric(TelemetryEdge.Metric.newBuilder()
                 .setNameTagValue(TelemetryEdge.NameTagValueMetric.newBuilder()
                     .setTimestamp(1539030613123L)
@@ -77,7 +76,7 @@ public class MetricRouterTest {
             )
             .build();
 
-        metricRouter.route("t1", postedMetric);
+        metricRouter.route("t1", "envoy-1", postedMetric);
 
         verify(envoyRegistry).getEnvoyLabels("envoy-1");
         verify(kafkaEgress).send("t1", KafkaMessageType.METRIC,

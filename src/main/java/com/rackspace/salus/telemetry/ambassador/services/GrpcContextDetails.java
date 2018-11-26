@@ -52,8 +52,11 @@ import org.lognet.springboot.grpc.GRpcGlobalInterceptor;
 @Slf4j
 public class GrpcContextDetails implements ServerInterceptor {
 
+    public static final String ENVOY_ID_HEADER = "x-envoy-id";
+
     private static final Pattern cnPattern = Pattern.compile("cn=([^,]+)");
     private static final Context.Key<String> TENANT_ID = Context.key("tenantId");
+    private static final Context.Key<String> ENVOY_ID = Context.key("envoyId");
     private static final Context.Key<SocketAddress> REMOTE_ADDR = Context.key("remoteAddr");
 
     /**
@@ -71,6 +74,13 @@ public class GrpcContextDetails implements ServerInterceptor {
         return REMOTE_ADDR.get();
     }
 
+    /**
+     * @return the Envoy instance ID of the current gRPC caller
+     */
+    public static String getCallerEnvoyId() {
+        return ENVOY_ID.get();
+    }
+
     @Override
     public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
             ServerCall<ReqT, RespT> call,
@@ -78,7 +88,8 @@ public class GrpcContextDetails implements ServerInterceptor {
             ServerCallHandler<ReqT, RespT> next) {
 
         final SocketAddress remoteAddr = call.getAttributes().get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR);
-        Context.current().withValue(REMOTE_ADDR, remoteAddr);
+
+        final String envoyId = headers.get(Metadata.Key.of(ENVOY_ID_HEADER, Metadata.ASCII_STRING_MARSHALLER));
 
         final String tenantId;
 
@@ -108,7 +119,11 @@ public class GrpcContextDetails implements ServerInterceptor {
         }
 
         return Contexts.interceptCall(
-                Context.current().withValues(TENANT_ID, tenantId, REMOTE_ADDR, remoteAddr),
+                Context.current().withValues(
+                    TENANT_ID, tenantId,
+                    REMOTE_ADDR, remoteAddr,
+                    ENVOY_ID, envoyId
+                ),
                 call, headers, next
         );
     }
