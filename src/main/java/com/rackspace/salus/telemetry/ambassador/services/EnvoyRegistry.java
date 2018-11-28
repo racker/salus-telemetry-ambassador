@@ -83,8 +83,8 @@ public class EnvoyRegistry {
             log.warn("Envoy attachment from remoteAddr={} is missing tenantId", remoteAddr);
             throw new StatusException(Status.INVALID_ARGUMENT.withDescription("tenantId is missing from request"));
         }
-        final Map<String, String> envoyLabels;
 
+        final Map<String, String> envoyLabels;
         try {
             envoyLabels = labelRulesProcessor.process(envoySummary.getLabelsMap());
         } catch (IllegalArgumentException e) {
