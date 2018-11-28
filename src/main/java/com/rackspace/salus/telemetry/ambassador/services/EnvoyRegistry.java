@@ -75,21 +75,32 @@ public class EnvoyRegistry {
         this.jsonPrinter = jsonPrinter;
     }
 
-    public void attach(String tenantId, String envoyId,
-        EnvoySummary envoySummary,
-        SocketAddress remoteAddr,
-        StreamObserver<EnvoyInstruction> instructionStreamObserver) {
+    public void attach(String tenantId, String envoyId, EnvoySummary envoySummary,
+                       SocketAddress remoteAddr, StreamObserver<EnvoyInstruction> instructionStreamObserver)
+                throws StatusException {
 
         if (StringUtils.isEmpty(envoyId)) {
             log.warn("Envoy attachment from remoteAddr={} is missing tenantId", remoteAddr);
-            instructionStreamObserver.onError(new StatusException(Status.INVALID_ARGUMENT));
+            throw new StatusException(Status.INVALID_ARGUMENT.withDescription("tenantId is missing from request"));
+        }
+        final Map<String, String> envoyLabels;
+
+        try {
+            envoyLabels = labelRulesProcessor.process(envoySummary.getLabelsMap());
+        } catch (IllegalArgumentException e) {
+            throw new StatusException(Status.INVALID_ARGUMENT.withDescription(e.getMessage()));
+        }
+        final List<String> supportedAgentTypes = convertToStrings(envoySummary.getSupportedAgentsList());
+        final String envoyIdentifier = envoySummary.getIdentifier();
+
+        if (!envoyLabels.containsKey(envoyIdentifier)) {
+            throw new StatusException(Status.INVALID_ARGUMENT.withDescription(
+                    String.format("%s is not a valid value for the identifier",
+                    envoyIdentifier)));
         }
 
-        final Map<String, String> envoyLabels = labelRulesProcessor.process(envoySummary.getLabelsMap());
-        final List<String> supportedAgentTypes = convertToStrings(envoySummary.getSupportedAgentsList());
-
-        log.info("Attaching envoy tenantId={}, envoyId={} from remoteAddr={} with labels={}, supports agents={}",
-            tenantId, envoyId, remoteAddr, envoyLabels, supportedAgentTypes);
+        log.info("Attaching envoy tenantId={}, envoyId={} from remoteAddr={} with identifier={}, labels={}, supports agents={}",
+            tenantId, envoyId, remoteAddr, envoyIdentifier, envoyLabels, supportedAgentTypes);
 
         envoyLeaseTracking.grant(envoyId)
             .thenCompose(leaseId -> {
