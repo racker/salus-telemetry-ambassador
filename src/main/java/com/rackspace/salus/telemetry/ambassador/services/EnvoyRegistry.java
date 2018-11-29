@@ -91,16 +91,16 @@ public class EnvoyRegistry {
             throw new StatusException(Status.INVALID_ARGUMENT.withDescription(e.getMessage()));
         }
         final List<String> supportedAgentTypes = convertToStrings(envoySummary.getSupportedAgentsList());
-        final String envoyIdentifier = envoySummary.getIdentifier();
+        final String identifier = envoySummary.getIdentifier();
 
-        if (!envoyLabels.containsKey(envoyIdentifier)) {
+        if (!envoyLabels.containsKey(identifier)) {
             throw new StatusException(Status.INVALID_ARGUMENT.withDescription(
                     String.format("%s is not a valid value for the identifier",
-                    envoyIdentifier)));
+                    identifier)));
         }
 
         log.info("Attaching envoy tenantId={}, envoyId={} from remoteAddr={} with identifier={}, labels={}, supports agents={}",
-            tenantId, envoyId, remoteAddr, envoyIdentifier, envoyLabels, supportedAgentTypes);
+            tenantId, envoyId, remoteAddr, identifier, envoyLabels, supportedAgentTypes);
 
         envoyLeaseTracking.grant(envoyId)
             .thenCompose(leaseId -> {
