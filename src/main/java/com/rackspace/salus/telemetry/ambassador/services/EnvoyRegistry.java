@@ -75,21 +75,42 @@ public class EnvoyRegistry {
         this.jsonPrinter = jsonPrinter;
     }
 
-    public void attach(String tenantId, String envoyId,
-        EnvoySummary envoySummary,
-        SocketAddress remoteAddr,
-        StreamObserver<EnvoyInstruction> instructionStreamObserver) {
+    /**
+     * Executed whenever we receive a new connection from an envoy.
+     *
+     * @param tenantId
+     * @param envoyId
+     * @param envoySummary
+     * @param remoteAddr
+     * @param instructionStreamObserver
+     * @throws StatusException
+     */
+    public void attach(String tenantId, String envoyId, EnvoySummary envoySummary,
+                       SocketAddress remoteAddr, StreamObserver<EnvoyInstruction> instructionStreamObserver)
+                throws StatusException {
 
         if (StringUtils.isEmpty(envoyId)) {
             log.warn("Envoy attachment from remoteAddr={} is missing tenantId", remoteAddr);
-            instructionStreamObserver.onError(new StatusException(Status.INVALID_ARGUMENT));
+            throw new StatusException(Status.INVALID_ARGUMENT.withDescription("tenantId is missing from request"));
         }
 
-        final Map<String, String> envoyLabels = labelRulesProcessor.process(envoySummary.getLabelsMap());
+        final Map<String, String> envoyLabels;
+        try {
+            envoyLabels = labelRulesProcessor.process(envoySummary.getLabelsMap());
+        } catch (IllegalArgumentException e) {
+            throw new StatusException(Status.INVALID_ARGUMENT.withDescription(e.getMessage()));
+        }
         final List<String> supportedAgentTypes = convertToStrings(envoySummary.getSupportedAgentsList());
+        final String identifier = envoySummary.getIdentifier();
 
-        log.info("Attaching envoy tenantId={}, envoyId={} from remoteAddr={} with labels={}, supports agents={}",
-            tenantId, envoyId, remoteAddr, envoyLabels, supportedAgentTypes);
+        if (!envoyLabels.containsKey(identifier)) {
+            throw new StatusException(Status.INVALID_ARGUMENT.withDescription(
+                    String.format("%s is not a valid value for the identifier",
+                    identifier)));
+        }
+
+        log.info("Attaching envoy tenantId={}, envoyId={} from remoteAddr={} with identifier={}, labels={}, supports agents={}",
+            tenantId, envoyId, remoteAddr, identifier, envoyLabels, supportedAgentTypes);
 
         envoyLeaseTracking.grant(envoyId)
             .thenCompose(leaseId -> {

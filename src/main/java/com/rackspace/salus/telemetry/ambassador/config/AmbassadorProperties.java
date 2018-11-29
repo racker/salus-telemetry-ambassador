@@ -37,7 +37,7 @@ public class AmbassadorProperties {
      * FOR DEVELOPMENT ONLY, disable TLS including mutual TLS authentication
      */
     boolean disableTls = false;
-    // The following assume the working directory is $PROJECT_DIR$/dev-support
+    // The following assume the working directory is $PROJECT_DIR$/dev
     String certChainPath = "certs/out/ambassador.pem";
     String trustCertPath = "certs/out/ca.pem";
     String keyPath = "certs/out/ambassador-pkcs8-key.pem";
