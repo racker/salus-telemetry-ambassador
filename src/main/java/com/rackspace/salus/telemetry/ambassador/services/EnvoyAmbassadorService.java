@@ -45,6 +45,7 @@ public class EnvoyAmbassadorService extends TelemetryAmbassadorGrpc.TelemetryAmb
     private final Counter messagesPost;
     private final Counter postLog;
     private final Counter keepAlive;
+    private final Counter exceptions;
 
 
     @Autowired
@@ -62,6 +63,7 @@ public class EnvoyAmbassadorService extends TelemetryAmbassadorGrpc.TelemetryAmb
         postLog = meterRegistry.counter("messages","operation", "postLog");
         messagesPost = meterRegistry.counter("messages","operation", "postMetric");
         keepAlive = meterRegistry.counter("messages","operation", "keepAlive");
+        exceptions = meterRegistry.counter("exceptions", "errors", "exceptions");
     }
 
     @Override
@@ -75,6 +77,10 @@ public class EnvoyAmbassadorService extends TelemetryAmbassadorGrpc.TelemetryAmb
             envoyRegistry.attach(GrpcContextDetails.getCallerTenantId(), envoyId, request, remoteAddr, responseObserver);
         } catch (StatusException e) {
             responseObserver.onError(e);
+        } catch (Exception e) {
+            log.error("Unhandled exception occurred in envoy attach", e);
+            exceptions.increment();
+            responseObserver.onError(new StatusException(Status.UNKNOWN.withDescription("Unknown error occurred")));
         }
     }
 

@@ -75,6 +75,16 @@ public class EnvoyRegistry {
         this.jsonPrinter = jsonPrinter;
     }
 
+    /**
+     * Executed whenever we receive a new connection from an envoy.
+     *
+     * @param tenantId
+     * @param envoyId
+     * @param envoySummary
+     * @param remoteAddr
+     * @param instructionStreamObserver
+     * @throws StatusException
+     */
     public void attach(String tenantId, String envoyId, EnvoySummary envoySummary,
                        SocketAddress remoteAddr, StreamObserver<EnvoyInstruction> instructionStreamObserver)
                 throws StatusException {
