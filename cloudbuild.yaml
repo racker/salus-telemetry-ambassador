@@ -1,0 +1,9 @@
+steps:
+- name: 'gcr.io/cloud-builders/mvn'
+  args: ['install', '-Dmaven.test.skip=true']
+- name: 'gcr.io/cloud-builders/mvn'
+  args: ['integration-test']
+#- name: 'gcr.io/cloud-builders/mvn'
+#  args: ['deploy']
+- name: 'gcr.io/cloud-builders/mvn'
+  args: ['-P', 'docker', '-Dmaven.deploy.skip=true', '-DskipLocalDockerBuild=true', '-Ddocker.image.prefix=gcr.io/salus-220516', 'deploy']
