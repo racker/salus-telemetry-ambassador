@@ -26,6 +26,7 @@ import com.rackspace.salus.services.TelemetryEdge.EnvoySummary;
 import com.rackspace.salus.telemetry.ambassador.config.AmbassadorProperties;
 import com.rackspace.salus.telemetry.etcd.services.EnvoyLabelManagement;
 import com.rackspace.salus.telemetry.etcd.services.EnvoyLeaseTracking;
+import com.rackspace.salus.telemetry.etcd.services.EnvoyNodeManagement;
 import io.grpc.Status;
 import io.grpc.StatusException;
 import io.grpc.StatusRuntimeException;
@@ -34,6 +35,7 @@ import java.net.SocketAddress;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import lombok.Data;
@@ -50,6 +52,7 @@ public class EnvoyRegistry {
     private final AmbassadorProperties appProperties;
     private final EnvoyLabelManagement envoyLabelManagement;
     private final EnvoyLeaseTracking envoyLeaseTracking;
+    private final EnvoyNodeManagement envoyNodeManagement;
     private final LabelRulesProcessor labelRulesProcessor;
     private final JsonFormat.Printer jsonPrinter;
 
@@ -66,11 +69,12 @@ public class EnvoyRegistry {
     public EnvoyRegistry(AmbassadorProperties appProperties,
                          EnvoyLabelManagement envoyLabelManagement,
                          EnvoyLeaseTracking envoyLeaseTracking,
-                         LabelRulesProcessor labelRulesProcessor,
+                         EnvoyNodeManagement envoyNodeManagement, LabelRulesProcessor labelRulesProcessor,
                          JsonFormat.Printer jsonPrinter) {
         this.appProperties = appProperties;
         this.envoyLabelManagement = envoyLabelManagement;
         this.envoyLeaseTracking = envoyLeaseTracking;
+        this.envoyNodeManagement = envoyNodeManagement;
         this.labelRulesProcessor = labelRulesProcessor;
         this.jsonPrinter = jsonPrinter;
     }
@@ -85,8 +89,8 @@ public class EnvoyRegistry {
      * @param instructionStreamObserver
      * @throws StatusException
      */
-    public void attach(String tenantId, String envoyId, EnvoySummary envoySummary,
-                       SocketAddress remoteAddr, StreamObserver<EnvoyInstruction> instructionStreamObserver)
+    public CompletableFuture<?> attach(String tenantId, String envoyId, EnvoySummary envoySummary,
+                                            SocketAddress remoteAddr, StreamObserver<EnvoyInstruction> instructionStreamObserver)
                 throws StatusException {
 
         if (StringUtils.isEmpty(envoyId)) {
@@ -109,10 +113,18 @@ public class EnvoyRegistry {
                     identifier)));
         }
 
+        EnvoyEntry existingEntry = envoys.get(envoyId);
+        if (existingEntry != null) {
+            log.warn("Saw re-attachment of same envoy id={}, so aborting the previous stream to solve race condition",
+                    envoyId);
+            existingEntry.instructionStream.onError(new StatusException(Status.ABORTED.withDescription("Reconnect seen from same envoyId")));
+            envoyLeaseTracking.revoke(envoyId);
+        }
+
         log.info("Attaching envoy tenantId={}, envoyId={} from remoteAddr={} with identifier={}, labels={}, supports agents={}",
             tenantId, envoyId, remoteAddr, identifier, envoyLabels, supportedAgentTypes);
 
-        envoyLeaseTracking.grant(envoyId)
+        return envoyLeaseTracking.grant(envoyId)
             .thenCompose(leaseId -> {
 
                 try {
@@ -126,28 +138,12 @@ public class EnvoyRegistry {
                         .thenApply(o -> leaseId);
 
                 } catch (InvalidProtocolBufferException e) {
-                    throw new RuntimeException("Failed to encode envoy summary", e);
+                    throw new RuntimeException("Failed to spread envoy", e);
                 }
 
             })
-            .handle((leaseId, throwable) -> {
-                if (throwable != null) {
-                    log.warn("Failed to spread envoy", throwable);
-                    instructionStreamObserver.onError(throwable);
-                } else {
-                    final EnvoyEntry previous = envoys.put(envoyId,
-                            new EnvoyEntry(instructionStreamObserver, envoyLabels)
-                            );
-
-                    if (previous != null) {
-                        log.warn("Saw re-attachment of same envoy id={}, so aborting the previous stream to solve race condition",
-                            envoyId);
-                        previous.instructionStream.onError(new StatusException(Status.ABORTED));
-
-                        envoyLeaseTracking.revoke(envoyId);
-                    }
-                }
-
+            .thenApply(leaseId -> {
+                envoys.put(envoyId, new EnvoyEntry(instructionStreamObserver, envoyLabels));
                 return leaseId;
             })
             .thenCompose(leaseId ->
@@ -163,6 +159,15 @@ public class EnvoyRegistry {
                 .thenApply(configCount -> {
                     log.debug("Pulled configs count={} for tenant={}, envoy={}",
                         configCount, tenantId, envoyId);
+                    return leaseId;
+                })
+            )
+            .thenCompose(leaseId ->
+                envoyNodeManagement.registerNode(tenantId, envoyId, leaseId, identifier, envoyLabels, remoteAddr)
+                .thenApply(putResponse -> {
+                    log.debug("Registered new envoy node for presence monitoring for " +
+                            "tenant={}, envoyId={}, identifier={}:{}",
+                            tenantId, envoyId, identifier, envoyLabels.get(identifier));
                     return leaseId;
                 })
             );

@@ -74,7 +74,7 @@ public class EnvoyAmbassadorService extends TelemetryAmbassadorGrpc.TelemetryAmb
         registerCancelHandler(envoyId, remoteAddr, responseObserver);
         envoyAttach.increment();
         try {
-            envoyRegistry.attach(GrpcContextDetails.getCallerTenantId(), envoyId, request, remoteAddr, responseObserver);
+            envoyRegistry.attach(GrpcContextDetails.getCallerTenantId(), envoyId, request, remoteAddr, responseObserver).join();
         } catch (StatusException e) {
             responseObserver.onError(e);
         } catch (Exception e) {
