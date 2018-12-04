@@ -123,8 +123,8 @@
                 <artifactId>spring-boot-maven-plugin</artifactId>
 
                 <configuration>
-                    <workingDirectory>../dev-support</workingDirectory>
-                    <arguments>--logging.level.com.rackspace.rmii=debug</arguments>
+                    <workingDirectory>../dev</workingDirectory>
+                    <arguments>--logging.level.com.rackspace.salus=debug</arguments>
                 </configuration>
             </plugin>
 
