@@ -51,7 +51,7 @@
 
         <dependency>
             <groupId>com.rackspace.salus</groupId>
-            <artifactId>salus-telemetry-label-management</artifactId>
+            <artifactId>salus-telemetry-etcd-adapter</artifactId>
             <version>0.1.0-SNAPSHOT</version>
         </dependency>
 
@@ -123,8 +123,8 @@
                 <artifactId>spring-boot-maven-plugin</artifactId>
 
                 <configuration>
-                    <workingDirectory>../dev-support</workingDirectory>
-                    <arguments>--logging.level.com.rackspace.rmii=debug</arguments>
+                    <workingDirectory>../dev</workingDirectory>
+                    <arguments>--logging.level.com.rackspace.salus=debug</arguments>
                 </configuration>
             </plugin>
 

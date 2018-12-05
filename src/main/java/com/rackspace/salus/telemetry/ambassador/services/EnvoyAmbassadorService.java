@@ -45,6 +45,7 @@ public class EnvoyAmbassadorService extends TelemetryAmbassadorGrpc.TelemetryAmb
     private final Counter messagesPost;
     private final Counter postLog;
     private final Counter keepAlive;
+    private final Counter exceptions;
 
 
     @Autowired
@@ -62,6 +63,7 @@ public class EnvoyAmbassadorService extends TelemetryAmbassadorGrpc.TelemetryAmb
         postLog = meterRegistry.counter("messages","operation", "postLog");
         messagesPost = meterRegistry.counter("messages","operation", "postMetric");
         keepAlive = meterRegistry.counter("messages","operation", "keepAlive");
+        exceptions = meterRegistry.counter("exceptions", "errors", "exceptions");
     }
 
     @Override
@@ -71,7 +73,15 @@ public class EnvoyAmbassadorService extends TelemetryAmbassadorGrpc.TelemetryAmb
 
         registerCancelHandler(envoyId, remoteAddr, responseObserver);
         envoyAttach.increment();
-        envoyRegistry.attach(GrpcContextDetails.getCallerTenantId(), envoyId, request, remoteAddr, responseObserver);
+        try {
+            envoyRegistry.attach(GrpcContextDetails.getCallerTenantId(), envoyId, request, remoteAddr, responseObserver).join();
+        } catch (StatusException e) {
+            responseObserver.onError(e);
+        } catch (Exception e) {
+            log.error("Unhandled exception occurred in envoy attach", e);
+            exceptions.increment();
+            responseObserver.onError(new StatusException(Status.UNKNOWN.withDescription("Unknown error occurred")));
+        }
     }
 
     private void registerCancelHandler(String instanceId, SocketAddress remoteAddr, StreamObserver<TelemetryEdge.EnvoyInstruction> responseObserver) {
