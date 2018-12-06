@@ -30,7 +30,7 @@ import com.rackspace.salus.services.TelemetryEdge;
 import com.rackspace.salus.telemetry.etcd.EtcdUtils;
 import com.rackspace.salus.telemetry.etcd.services.EnvoyLeaseTracking;
 import com.rackspace.salus.telemetry.etcd.types.Keys;
-import com.rackspace.salus.telemetry.model.AgentInfo;
+import com.rackspace.salus.telemetry.model.AgentRelease;
 import java.io.IOException;
 import java.util.concurrent.CompletableFuture;
 import java.util.regex.Matcher;
@@ -155,17 +155,17 @@ public class AgentInstallsWatcher {
                 }
 
                 try {
-                    final AgentInfo agentInfo =
-                        EtcdUtils.parseValue(objectMapper, getResponse.getKvs().get(0), AgentInfo.class);
+                    final AgentRelease agentRelease =
+                        EtcdUtils.parseValue(objectMapper, getResponse.getKvs().get(0), AgentRelease.class);
 
                     final TelemetryEdge.EnvoyInstruction instruction = TelemetryEdge.EnvoyInstruction.newBuilder()
                         .setInstall(
                             TelemetryEdge.EnvoyInstructionInstall.newBuilder()
-                                .setUrl(agentInfo.getUrl())
-                                .setExe(agentInfo.getExe())
+                                .setUrl(agentRelease.getUrl())
+                                .setExe(agentRelease.getExe())
                                 .setAgent(TelemetryEdge.Agent.newBuilder()
-                                    .setType(TelemetryEdge.AgentType.valueOf(agentInfo.getType().name()))
-                                    .setVersion(agentInfo.getVersion())
+                                    .setType(TelemetryEdge.AgentType.valueOf(agentRelease.getType().name()))
+                                    .setVersion(agentRelease.getVersion())
                                     .build())
                         )
                         .build();
