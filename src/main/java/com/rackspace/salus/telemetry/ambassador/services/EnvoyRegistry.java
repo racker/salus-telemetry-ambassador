@@ -26,7 +26,7 @@ import com.rackspace.salus.services.TelemetryEdge.EnvoySummary;
 import com.rackspace.salus.telemetry.ambassador.config.AmbassadorProperties;
 import com.rackspace.salus.telemetry.etcd.services.EnvoyLabelManagement;
 import com.rackspace.salus.telemetry.etcd.services.EnvoyLeaseTracking;
-import com.rackspace.salus.telemetry.etcd.services.EnvoyNodeManagement;
+import com.rackspace.salus.telemetry.etcd.services.EnvoyResourceManagement;
 import io.grpc.Status;
 import io.grpc.StatusException;
 import io.grpc.StatusRuntimeException;
@@ -52,7 +52,7 @@ public class EnvoyRegistry {
     private final AmbassadorProperties appProperties;
     private final EnvoyLabelManagement envoyLabelManagement;
     private final EnvoyLeaseTracking envoyLeaseTracking;
-    private final EnvoyNodeManagement envoyNodeManagement;
+    private final EnvoyResourceManagement envoyResourceManagement;
     private final LabelRulesProcessor labelRulesProcessor;
     private final JsonFormat.Printer jsonPrinter;
 
@@ -69,12 +69,12 @@ public class EnvoyRegistry {
     public EnvoyRegistry(AmbassadorProperties appProperties,
                          EnvoyLabelManagement envoyLabelManagement,
                          EnvoyLeaseTracking envoyLeaseTracking,
-                         EnvoyNodeManagement envoyNodeManagement, LabelRulesProcessor labelRulesProcessor,
+                         EnvoyResourceManagement envoyResourceManagement, LabelRulesProcessor labelRulesProcessor,
                          JsonFormat.Printer jsonPrinter) {
         this.appProperties = appProperties;
         this.envoyLabelManagement = envoyLabelManagement;
         this.envoyLeaseTracking = envoyLeaseTracking;
-        this.envoyNodeManagement = envoyNodeManagement;
+        this.envoyResourceManagement = envoyResourceManagement;
         this.labelRulesProcessor = labelRulesProcessor;
         this.jsonPrinter = jsonPrinter;
     }
@@ -163,9 +163,9 @@ public class EnvoyRegistry {
                 })
             )
             .thenCompose(leaseId ->
-                envoyNodeManagement.registerNode(tenantId, envoyId, leaseId, identifier, envoyLabels, remoteAddr)
+                envoyResourceManagement.registerResource(tenantId, envoyId, leaseId, identifier, envoyLabels, remoteAddr)
                 .thenApply(putResponse -> {
-                    log.debug("Registered new envoy node for presence monitoring for " +
+                    log.debug("Registered new envoy resource for presence monitoring for " +
                             "tenant={}, envoyId={}, identifier={}:{}",
                             tenantId, envoyId, identifier, envoyLabels.get(identifier));
                     return leaseId;
