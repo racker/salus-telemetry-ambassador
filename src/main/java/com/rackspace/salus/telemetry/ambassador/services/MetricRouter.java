@@ -75,7 +75,7 @@ public class MetricRouter {
             .setAccount(tenantId)
             .setTimestamp(universalTimestampFormatter.format(timestamp))
             .setDeviceMetadata(envoyLabels)
-            .setMonitoringSystem(MonitoringSystem.RMII)
+            .setMonitoringSystem(MonitoringSystem.SALUS)
             .setSystemMetadata(Collections.singletonMap("envoyId", envoyId))
             .setCollectionMetadata(nameTagValue.getTagsMap())
             .setCollectionName(nameTagValue.getName())
