@@ -23,6 +23,8 @@ import static com.rackspace.salus.telemetry.etcd.EtcdUtils.parseValue;
 
 import com.coreos.jetcd.Client;
 import com.coreos.jetcd.Watch;
+import com.coreos.jetcd.common.exception.ClosedClientException;
+import com.coreos.jetcd.common.exception.ClosedWatcherException;
 import com.coreos.jetcd.data.ByteSequence;
 import com.coreos.jetcd.data.KeyValue;
 import com.coreos.jetcd.options.WatchOption;
@@ -95,8 +97,10 @@ public class AppliedConfigsWatcher {
                 final WatchResponse response = watcher.listen();
                 response.getEvents().forEach(this::processEvent);
 
-            } catch (InterruptedException e) {
-                log.warn("Watcher failed while listening", e);
+            } catch (ClosedClientException | ClosedWatcherException e) {
+                log.debug("Stopping watcher");
+            } catch (Exception e) {
+                log.warn("Unexpected exception while watching", e);
             }
         }
     }
