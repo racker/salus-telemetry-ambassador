@@ -20,6 +20,8 @@ package com.rackspace.salus.telemetry.ambassador.services;
 
 import com.coreos.jetcd.Client;
 import com.coreos.jetcd.Watch;
+import com.coreos.jetcd.common.exception.ClosedClientException;
+import com.coreos.jetcd.common.exception.ClosedWatcherException;
 import com.coreos.jetcd.data.ByteSequence;
 import com.coreos.jetcd.data.KeyValue;
 import com.coreos.jetcd.options.WatchOption;
@@ -88,9 +90,10 @@ public class AgentInstallsWatcher {
             try {
                 final WatchResponse response = watcher.listen();
                 response.getEvents().forEach(this::processEvent);
+            } catch (ClosedClientException | ClosedWatcherException e) {
+                log.debug("Stopping watcher");
             } catch (Exception e) {
-                log.debug("Stopping watcher", e);
-                return;
+                log.warn("Unexpected exception while watching", e);
             }
         }
     }
