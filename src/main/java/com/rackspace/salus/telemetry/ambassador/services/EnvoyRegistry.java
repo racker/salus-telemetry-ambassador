@@ -105,12 +105,12 @@ public class EnvoyRegistry {
             throw new StatusException(Status.INVALID_ARGUMENT.withDescription(e.getMessage()));
         }
         final List<String> supportedAgentTypes = convertToStrings(envoySummary.getSupportedAgentsList());
-        final String identifier = envoySummary.getIdentifier();
+        final String identifierName = envoySummary.getIdentifierName();
 
-        if (!envoyLabels.containsKey(identifier)) {
+        if (!envoyLabels.containsKey(identifierName)) {
             throw new StatusException(Status.INVALID_ARGUMENT.withDescription(
-                    String.format("%s is not a valid value for the identifier",
-                    identifier)));
+                    String.format("%s is not a valid value for the identifierName",
+                    identifierName)));
         }
 
         EnvoyEntry existingEntry = envoys.get(envoyId);
@@ -121,8 +121,8 @@ public class EnvoyRegistry {
             envoyLeaseTracking.revoke(envoyId);
         }
 
-        log.info("Attaching envoy tenantId={}, envoyId={} from remoteAddr={} with identifier={}, labels={}, supports agents={}",
-            tenantId, envoyId, remoteAddr, identifier, envoyLabels, supportedAgentTypes);
+        log.info("Attaching envoy tenantId={}, envoyId={} from remoteAddr={} with identifierName={}, labels={}, supports agents={}",
+            tenantId, envoyId, remoteAddr, identifierName, envoyLabels, supportedAgentTypes);
 
         return envoyLeaseTracking.grant(envoyId)
             .thenCompose(leaseId -> {
@@ -163,11 +163,11 @@ public class EnvoyRegistry {
                 })
             )
             .thenCompose(leaseId ->
-                envoyResourceManagement.registerResource(tenantId, envoyId, leaseId, identifier, envoyLabels, remoteAddr)
+                envoyResourceManagement.registerResource(tenantId, envoyId, leaseId, identifierName, envoyLabels, remoteAddr)
                 .thenApply(putResponse -> {
                     log.debug("Registered new envoy resource for presence monitoring for " +
-                            "tenant={}, envoyId={}, identifier={}:{}",
-                            tenantId, envoyId, identifier, envoyLabels.get(identifier));
+                            "tenant={}, envoyId={}, identifierName={}:{}",
+                            tenantId, envoyId, identifierName, envoyLabels.get(identifierName));
                     return leaseId;
                 })
             );
