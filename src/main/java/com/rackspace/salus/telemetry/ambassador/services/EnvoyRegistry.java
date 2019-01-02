@@ -27,6 +27,9 @@ import com.rackspace.salus.telemetry.ambassador.config.AmbassadorProperties;
 import com.rackspace.salus.telemetry.etcd.services.EnvoyLabelManagement;
 import com.rackspace.salus.telemetry.etcd.services.EnvoyLeaseTracking;
 import com.rackspace.salus.telemetry.etcd.services.EnvoyResourceManagement;
+import com.rackspace.salus.telemetry.model.Resource;
+import com.rackspace.salus.telemetry.model.ResourceIdentifier;
+import com.rackspace.salus.telemetry.repositories.ResourceRepository;
 import io.grpc.Status;
 import io.grpc.StatusException;
 import io.grpc.StatusRuntimeException;
@@ -47,6 +50,7 @@ import org.springframework.util.StringUtils;
 
 @Service
 @Slf4j
+//@EnableJpaRepositories(basePackageClasses= {ResourceRepository.class})
 public class EnvoyRegistry {
 
     private final AmbassadorProperties appProperties;
@@ -54,6 +58,7 @@ public class EnvoyRegistry {
     private final EnvoyLeaseTracking envoyLeaseTracking;
     private final EnvoyResourceManagement envoyResourceManagement;
     private final LabelRulesProcessor labelRulesProcessor;
+    private final ResourceRepository resourceRepository;
     private final JsonFormat.Printer jsonPrinter;
 
     @Data
@@ -70,12 +75,13 @@ public class EnvoyRegistry {
                          EnvoyLabelManagement envoyLabelManagement,
                          EnvoyLeaseTracking envoyLeaseTracking,
                          EnvoyResourceManagement envoyResourceManagement, LabelRulesProcessor labelRulesProcessor,
-                         JsonFormat.Printer jsonPrinter) {
+                         ResourceRepository resourceRepository, JsonFormat.Printer jsonPrinter) {
         this.appProperties = appProperties;
         this.envoyLabelManagement = envoyLabelManagement;
         this.envoyLeaseTracking = envoyLeaseTracking;
         this.envoyResourceManagement = envoyResourceManagement;
         this.labelRulesProcessor = labelRulesProcessor;
+        this.resourceRepository = resourceRepository;
         this.jsonPrinter = jsonPrinter;
     }
 
@@ -170,7 +176,18 @@ public class EnvoyRegistry {
                             tenantId, envoyId, identifierName, envoyLabels.get(identifierName));
                     return leaseId;
                 })
-            );
+            )
+            .thenApply(leaseId -> {
+                ResourceIdentifier resourceIdentifier = new ResourceIdentifier()
+                        .setIdentifierName(identifierName)
+                        .setIdentifierValue(envoyLabels.get(identifierName));
+                Resource resource = new Resource()
+                        .setResourceIdentifier(resourceIdentifier)
+                        .setTenantId(tenantId)
+                        .setLabels(envoyLabels);
+                resourceRepository.save(resource);
+                return leaseId;
+            });
 
     }
 

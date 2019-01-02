@@ -5,11 +5,17 @@ ambassador:
       telemetry.logs.json
     METRIC:
       telemetry.metrics.json
+    CHECKS:
+      checks.json
 etcd:
   url: http://localhost:2479
 spring:
   resources:
     add-mappings: false
+  kafka:
+    consumer:
+      group-id: "ambassadors"
+      auto-offset-reset: "earliest"
 management.endpoints.web.exposure.include: "health,jolokia,metrics"
 management:
   metrics:

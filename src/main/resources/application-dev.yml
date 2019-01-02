@@ -1,5 +1,15 @@
 server:
   port: 8081
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: create
+    database-platform: org.hibernate.dialect.MySQL5Dialect
+  datasource:
+    username: dev
+    password: pass
+    url: jdbc:mysql://localhost:3306/default?verifyServerCertificate=false&useSSL=false&requireSSL=false
+    driver-class-name: com.mysql.jdbc.Driver
 logging:
   level:
     com.rackspace.salus: debug

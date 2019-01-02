@@ -20,5 +20,6 @@ package com.rackspace.salus.telemetry.ambassador.types;
 
 public enum KafkaMessageType {
     LOG,
-    METRIC;
+    METRIC,
+    CHECKS;
 }
