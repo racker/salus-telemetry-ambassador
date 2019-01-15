@@ -26,11 +26,11 @@ import com.rackspace.salus.services.TelemetryEdge;
 import com.rackspace.salus.services.TelemetryEdge.EnvoyInstruction;
 import com.rackspace.salus.services.TelemetryEdge.EnvoySummary;
 import com.rackspace.salus.telemetry.ambassador.config.AmbassadorProperties;
-import com.rackspace.salus.telemetry.ambassador.types.KafkaMessageType;
 import com.rackspace.salus.telemetry.etcd.services.EnvoyLabelManagement;
 import com.rackspace.salus.telemetry.etcd.services.EnvoyLeaseTracking;
 import com.rackspace.salus.telemetry.etcd.services.EnvoyResourceManagement;
-import com.rackspace.salus.telemetry.events.AttachEvent;
+import com.rackspace.salus.telemetry.messaging.AttachEvent;
+import com.rackspace.salus.telemetry.messaging.KafkaMessageType;
 import io.grpc.Status;
 import io.grpc.StatusException;
 import io.grpc.StatusRuntimeException;
@@ -203,7 +203,7 @@ public class EnvoyRegistry {
             .setLabels(envoyLabels);
 
         kafkaTemplate.send(
-            appProperties.getKafkaTopics().get(KafkaMessageType.EVENT_ATTACH),
+            appProperties.getKafkaTopics().get(KafkaMessageType.ATTACH),
             buildMessageKey(attachEvent),
             attachEvent
         );

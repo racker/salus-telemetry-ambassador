@@ -18,7 +18,7 @@
 
 package com.rackspace.salus.telemetry.ambassador.config;
 
-import com.rackspace.salus.telemetry.ambassador.types.KafkaMessageType;
+import com.rackspace.salus.telemetry.messaging.KafkaMessageType;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;

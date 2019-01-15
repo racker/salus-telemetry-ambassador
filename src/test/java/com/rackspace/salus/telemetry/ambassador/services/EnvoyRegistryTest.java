@@ -13,7 +13,7 @@ import com.rackspace.salus.telemetry.etcd.EtcdUtils;
 import com.rackspace.salus.telemetry.etcd.services.EnvoyLabelManagement;
 import com.rackspace.salus.telemetry.etcd.services.EnvoyLeaseTracking;
 import com.rackspace.salus.telemetry.etcd.services.EnvoyResourceManagement;
-import com.rackspace.salus.telemetry.events.AttachEvent;
+import com.rackspace.salus.telemetry.messaging.AttachEvent;
 import com.rackspace.salus.telemetry.model.ResourceInfo;
 import io.grpc.StatusException;
 import io.grpc.stub.StreamObserver;

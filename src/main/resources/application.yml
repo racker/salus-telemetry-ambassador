@@ -5,7 +5,7 @@ ambassador:
       telemetry.logs.json
     METRIC:
       telemetry.metrics.json
-    EVENT_ATTACH:
+    ATTACH:
       telemetry.event.resource.json
 etcd:
   url: http://localhost:2479
