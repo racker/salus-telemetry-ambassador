@@ -18,6 +18,8 @@
 
 package com.rackspace.salus.telemetry.ambassador.services;
 
+import static com.rackspace.salus.common.messaging.KafkaMessageKeyBuilder.buildMessageKey;
+
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.util.JsonFormat;
 import com.rackspace.salus.services.TelemetryEdge;
@@ -27,10 +29,13 @@ import com.rackspace.salus.telemetry.ambassador.config.AmbassadorProperties;
 import com.rackspace.salus.telemetry.etcd.services.EnvoyLabelManagement;
 import com.rackspace.salus.telemetry.etcd.services.EnvoyLeaseTracking;
 import com.rackspace.salus.telemetry.etcd.services.EnvoyResourceManagement;
+import com.rackspace.salus.telemetry.messaging.AttachEvent;
+import com.rackspace.salus.telemetry.messaging.KafkaMessageType;
 import io.grpc.Status;
 import io.grpc.StatusException;
 import io.grpc.StatusRuntimeException;
 import io.grpc.stub.StreamObserver;
+import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.Collections;
 import java.util.List;
@@ -41,6 +46,7 @@ import java.util.stream.Collectors;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -55,6 +61,7 @@ public class EnvoyRegistry {
     private final EnvoyResourceManagement envoyResourceManagement;
     private final LabelRulesProcessor labelRulesProcessor;
     private final JsonFormat.Printer jsonPrinter;
+    private final KafkaTemplate<String,Object> kafkaTemplate;
 
     @Data
     static class EnvoyEntry {
@@ -69,14 +76,17 @@ public class EnvoyRegistry {
     public EnvoyRegistry(AmbassadorProperties appProperties,
                          EnvoyLabelManagement envoyLabelManagement,
                          EnvoyLeaseTracking envoyLeaseTracking,
-                         EnvoyResourceManagement envoyResourceManagement, LabelRulesProcessor labelRulesProcessor,
-                         JsonFormat.Printer jsonPrinter) {
+                         EnvoyResourceManagement envoyResourceManagement,
+                         LabelRulesProcessor labelRulesProcessor,
+                         JsonFormat.Printer jsonPrinter,
+                         KafkaTemplate<String,Object> kafkaTemplate) {
         this.appProperties = appProperties;
         this.envoyLabelManagement = envoyLabelManagement;
         this.envoyLeaseTracking = envoyLeaseTracking;
         this.envoyResourceManagement = envoyResourceManagement;
         this.labelRulesProcessor = labelRulesProcessor;
         this.jsonPrinter = jsonPrinter;
+        this.kafkaTemplate = kafkaTemplate;
     }
 
     /**
@@ -87,6 +97,7 @@ public class EnvoyRegistry {
      * @param envoySummary
      * @param remoteAddr
      * @param instructionStreamObserver
+     * @return a {@link CompletableFuture} of the lease ID granted to the attached Envoy
      * @throws StatusException
      */
     public CompletableFuture<?> attach(String tenantId, String envoyId, EnvoySummary envoySummary,
@@ -170,8 +181,32 @@ public class EnvoyRegistry {
                             tenantId, envoyId, identifierName, envoyLabels.get(identifierName));
                     return leaseId;
                 })
-            );
+            )
+            .thenApply(leaseId ->  {
+                postAttachEvent(tenantId, envoyId, envoySummary, envoyLabels, remoteAddr);
+                return leaseId;
+            });
 
+    }
+
+    private void postAttachEvent(String tenantId, String envoyId, EnvoySummary envoySummary,
+                                 Map<String, String> envoyLabels,
+                                 SocketAddress remoteAddr) {
+
+        final String identifierName = envoySummary.getIdentifierName();
+        final AttachEvent attachEvent = new AttachEvent()
+            .setTenantId(tenantId)
+            .setEnvoyId(envoyId)
+            .setIdentifierName(identifierName)
+            .setIdentifierValue(envoyLabels.get(identifierName))
+            .setEnvoyAddress(((InetSocketAddress) remoteAddr).getHostString())
+            .setLabels(envoyLabels);
+
+        kafkaTemplate.send(
+            appProperties.getKafkaTopics().get(KafkaMessageType.ATTACH),
+            buildMessageKey(attachEvent),
+            attachEvent
+        );
     }
 
     public boolean keepAlive(String instanceId, SocketAddress remoteAddr) {

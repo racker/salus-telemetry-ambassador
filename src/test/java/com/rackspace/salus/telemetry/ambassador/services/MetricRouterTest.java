@@ -25,7 +25,7 @@ import static org.mockito.Mockito.when;
 
 import com.rackspace.salus.services.TelemetryEdge;
 import com.rackspace.salus.telemetry.ambassador.config.AvroConfig;
-import com.rackspace.salus.telemetry.ambassador.types.KafkaMessageType;
+import com.rackspace.salus.telemetry.messaging.KafkaMessageType;
 import java.util.HashMap;
 import java.util.Map;
 import org.junit.Test;

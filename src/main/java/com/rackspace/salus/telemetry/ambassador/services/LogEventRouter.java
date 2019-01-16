@@ -23,7 +23,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.rackspace.salus.services.TelemetryEdge.LogEvent;
-import com.rackspace.salus.telemetry.ambassador.types.KafkaMessageType;
+import com.rackspace.salus.telemetry.messaging.KafkaMessageType;
 import java.io.IOException;
 import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
