@@ -51,19 +51,13 @@ import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.json.JsonTest;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.test.context.junit4.SpringRunner;
 
 
 @RunWith(SpringRunner.class)
-@SpringBootTest
-@JsonTest // sets up ObjectMapper
+@JsonTest
 public class AppliedConfigsWatcherTest {
-    //@Configuration
-    //@Import({AppliedConfigsWatcher.class})
-    //static class TestConfig { }
-
     @MockBean
     Client etcd;
 
