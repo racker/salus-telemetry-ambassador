@@ -61,8 +61,8 @@ public class EnvoyRegistryTest {
   @Test
   public void postsAttachEventOnAttach() throws StatusException {
     final EnvoySummary envoySummary = EnvoySummary.newBuilder()
-        .setIdentifierName("hostname")
-        .putLabels("hostname", "test-host")
+        .setResourceId("hostname:test-host")
+        .putLabels("os", "linux")
         .build();
 
     final CompletableFuture<Long> assignedLease = CompletableFuture.completedFuture(1234L);
@@ -91,9 +91,8 @@ public class EnvoyRegistryTest {
             "telemetry.event.resource.json",
             "t-1:hostname:test-host",
             new AttachEvent()
-                .setIdentifierName("hostname")
-                .setIdentifierValue("test-host")
-                .setLabels(Collections.singletonMap("hostname", "test-host"))
+                .setResourceId("hostname:test-host")
+                .setLabels(Collections.singletonMap("os", "LINUX"))
                 .setEnvoyId("e-1")
                 .setTenantId("t-1")
                 .setEnvoyAddress("localhost")

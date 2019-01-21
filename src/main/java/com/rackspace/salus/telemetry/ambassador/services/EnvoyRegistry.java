@@ -116,13 +116,7 @@ public class EnvoyRegistry {
             throw new StatusException(Status.INVALID_ARGUMENT.withDescription(e.getMessage()));
         }
         final List<String> supportedAgentTypes = convertToStrings(envoySummary.getSupportedAgentsList());
-        final String identifierName = envoySummary.getIdentifierName();
-
-        if (!envoyLabels.containsKey(identifierName)) {
-            throw new StatusException(Status.INVALID_ARGUMENT.withDescription(
-                    String.format("%s is not a valid value for the identifierName",
-                    identifierName)));
-        }
+        final String resourceId = envoySummary.getResourceId();
 
         EnvoyEntry existingEntry = envoys.get(envoyId);
         if (existingEntry != null) {
@@ -132,8 +126,8 @@ public class EnvoyRegistry {
             envoyLeaseTracking.revoke(envoyId);
         }
 
-        log.info("Attaching envoy tenantId={}, envoyId={} from remoteAddr={} with identifierName={}, labels={}, supports agents={}",
-            tenantId, envoyId, remoteAddr, identifierName, envoyLabels, supportedAgentTypes);
+        log.info("Attaching envoy tenantId={}, envoyId={} from remoteAddr={} with resourceId={}, labels={}, supports agents={}",
+            tenantId, envoyId, remoteAddr, resourceId, envoyLabels, supportedAgentTypes);
 
         return envoyLeaseTracking.grant(envoyId)
             .thenCompose(leaseId -> {
@@ -174,11 +168,11 @@ public class EnvoyRegistry {
                 })
             )
             .thenCompose(leaseId ->
-                envoyResourceManagement.registerResource(tenantId, envoyId, leaseId, identifierName, envoyLabels, remoteAddr)
+                envoyResourceManagement.registerResource(tenantId, envoyId, leaseId, resourceId, envoyLabels, remoteAddr)
                 .thenApply(putResponse -> {
                     log.debug("Registered new envoy resource for presence monitoring for " +
-                            "tenant={}, envoyId={}, identifierName={}:{}",
-                            tenantId, envoyId, identifierName, envoyLabels.get(identifierName));
+                            "tenant={}, envoyId={}, resourceId={}",
+                            tenantId, envoyId, resourceId);
                     return leaseId;
                 })
             )
@@ -193,12 +187,11 @@ public class EnvoyRegistry {
                                  Map<String, String> envoyLabels,
                                  SocketAddress remoteAddr) {
 
-        final String identifierName = envoySummary.getIdentifierName();
+        final String resourceId = envoySummary.getResourceId();
         final AttachEvent attachEvent = new AttachEvent()
             .setTenantId(tenantId)
             .setEnvoyId(envoyId)
-            .setIdentifierName(identifierName)
-            .setIdentifierValue(envoyLabels.get(identifierName))
+            .setResourceId(resourceId)
             .setEnvoyAddress(((InetSocketAddress) remoteAddr).getHostString())
             .setLabels(envoyLabels);
 
