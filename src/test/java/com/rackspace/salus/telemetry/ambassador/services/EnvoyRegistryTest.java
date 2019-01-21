@@ -98,4 +98,27 @@ public class EnvoyRegistryTest {
                 .setEnvoyAddress("localhost")
         );
   }
+
+  @Test(expected = StatusException.class)
+  public void failsAttachWhenAbsentResourceId() throws StatusException {
+    final EnvoySummary envoySummary = EnvoySummary.newBuilder()
+        .putLabels("os", "linux")
+        .build();
+
+    envoyRegistry.attach("t-1", "e-1", envoySummary,
+        InetSocketAddress.createUnresolved("localhost", 60000), streamObserver
+    ).join();
+  }
+
+  @Test(expected = StatusException.class)
+  public void failsAttachWhenEmptyResourceId() throws StatusException {
+    final EnvoySummary envoySummary = EnvoySummary.newBuilder()
+        .setResourceId("    ")
+        .putLabels("os", "linux")
+        .build();
+
+    envoyRegistry.attach("t-1", "e-1", envoySummary,
+        InetSocketAddress.createUnresolved("localhost", 60000), streamObserver
+    ).join();
+  }
 }
