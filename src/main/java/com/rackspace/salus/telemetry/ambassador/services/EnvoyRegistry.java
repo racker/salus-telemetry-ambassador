@@ -22,6 +22,7 @@ import static com.rackspace.salus.common.messaging.KafkaMessageKeyBuilder.buildM
 
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.util.JsonFormat;
+import com.rackspace.salus.common.messaging.KafkaTopicProperties;
 import com.rackspace.salus.services.TelemetryEdge;
 import com.rackspace.salus.services.TelemetryEdge.EnvoyInstruction;
 import com.rackspace.salus.services.TelemetryEdge.EnvoySummary;
@@ -30,7 +31,6 @@ import com.rackspace.salus.telemetry.etcd.services.EnvoyLabelManagement;
 import com.rackspace.salus.telemetry.etcd.services.EnvoyLeaseTracking;
 import com.rackspace.salus.telemetry.etcd.services.EnvoyResourceManagement;
 import com.rackspace.salus.telemetry.messaging.AttachEvent;
-import com.rackspace.salus.telemetry.messaging.KafkaMessageType;
 import io.grpc.Status;
 import io.grpc.StatusException;
 import io.grpc.StatusRuntimeException;
@@ -56,6 +56,7 @@ import org.springframework.util.StringUtils;
 public class EnvoyRegistry {
 
     private final AmbassadorProperties appProperties;
+    private final KafkaTopicProperties kafkaTopics;
     private final EnvoyLabelManagement envoyLabelManagement;
     private final EnvoyLeaseTracking envoyLeaseTracking;
     private final EnvoyResourceManagement envoyResourceManagement;
@@ -74,6 +75,7 @@ public class EnvoyRegistry {
     @SuppressWarnings("SpringJavaInjectionPointsAutowiringInspection")
     @Autowired
     public EnvoyRegistry(AmbassadorProperties appProperties,
+                         KafkaTopicProperties kafkaTopics,
                          EnvoyLabelManagement envoyLabelManagement,
                          EnvoyLeaseTracking envoyLeaseTracking,
                          EnvoyResourceManagement envoyResourceManagement,
@@ -81,6 +83,7 @@ public class EnvoyRegistry {
                          JsonFormat.Printer jsonPrinter,
                          KafkaTemplate<String,Object> kafkaTemplate) {
         this.appProperties = appProperties;
+        this.kafkaTopics = kafkaTopics;
         this.envoyLabelManagement = envoyLabelManagement;
         this.envoyLeaseTracking = envoyLeaseTracking;
         this.envoyResourceManagement = envoyResourceManagement;
@@ -199,7 +202,7 @@ public class EnvoyRegistry {
             .setLabels(envoyLabels);
 
         kafkaTemplate.send(
-            appProperties.getKafkaTopics().get(KafkaMessageType.ATTACH),
+            kafkaTopics.getAttaches(),
             buildMessageKey(attachEvent),
             attachEvent
         );
