@@ -88,7 +88,7 @@ public class EnvoyRegistryTest {
 
     verify(kafkaTemplate)
         .send(
-            "telemetry.event.resource.json",
+            "telemetry.attaches.json",
             "t-1:hostname:test-host",
             new AttachEvent()
                 .setResourceId("hostname:test-host")

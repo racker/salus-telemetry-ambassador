@@ -18,10 +18,8 @@
 
 package com.rackspace.salus.telemetry.ambassador.config;
 
-import com.rackspace.salus.telemetry.messaging.KafkaMessageType;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
@@ -47,6 +45,4 @@ public class AmbassadorProperties {
     List<String> altExternalNames = Collections.singletonList("127.0.0.1");
 
     long envoyLeaseSec = 30;
-
-    Map<KafkaMessageType, String> kafkaTopics;
 }

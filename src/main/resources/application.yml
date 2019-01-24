@@ -1,12 +1,5 @@
 ambassador:
   envoyRefreshInterval: PT10S
-  kafka-topics:
-    LOG:
-      telemetry.logs.json
-    METRIC:
-      telemetry.metrics.json
-    ATTACH:
-      telemetry.event.resource.json
 etcd:
   url: http://localhost:2479
 spring:
