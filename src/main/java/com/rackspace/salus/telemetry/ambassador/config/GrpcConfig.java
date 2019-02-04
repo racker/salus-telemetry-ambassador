@@ -1,19 +1,17 @@
 /*
- *    Copyright 2018 Rackspace US, Inc.
+ * Copyright 2019 Rackspace US, Inc.
  *
- *    Licensed under the Apache License, Version 2.0 (the "License");
- *    you may not use this file except in compliance with the License.
- *    You may obtain a copy of the License at
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- *        http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
- *    Unless required by applicable law or agreed to in writing, software
- *    distributed under the License is distributed on an "AS IS" BASIS,
- *    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *    See the License for the specific language governing permissions and
- *    limitations under the License.
- *
- *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 package com.rackspace.salus.telemetry.ambassador.config;
@@ -39,6 +37,7 @@ import org.lognet.springboot.grpc.GRpcServerBuilderConfigurer;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.util.Assert;
 import org.springframework.vault.core.VaultTemplate;
 import org.springframework.vault.support.CertificateBundle;
 import org.springframework.vault.support.VaultCertificateRequest;
@@ -93,11 +92,16 @@ public class GrpcConfig extends GRpcServerBuilderConfigurer {
     }
 
     private SslContextBuilder buildSslContextFromVault() {
-        log.info("Loading certificates from Vault");
+        final String externalName = appProperties.getExternalName();
+        Assert.hasText(
+            externalName,
+            "Ambassador's externalName must be set to its FQDN");
+
+        log.info("Loading certificates from Vault for {}", externalName);
         final VaultCertificateResponse resp = vaultTemplate.opsForPki()
             .issueCertificate(appProperties.getVaultPkiRole(),
                 VaultCertificateRequest.builder()
-                    .commonName(appProperties.getExternalName())
+                    .commonName(externalName)
                     .altNames(appProperties.getAltExternalNames())
                     .build());
 
