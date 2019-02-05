@@ -18,19 +18,24 @@
 
 package com.rackspace.salus.telemetry.ambassador.services;
 
+import static com.rackspace.salus.common.messaging.KafkaMessageKeyBuilder.buildMessageKey;
+
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.util.JsonFormat;
+import com.rackspace.salus.common.messaging.KafkaTopicProperties;
 import com.rackspace.salus.services.TelemetryEdge;
 import com.rackspace.salus.services.TelemetryEdge.EnvoyInstruction;
 import com.rackspace.salus.services.TelemetryEdge.EnvoySummary;
 import com.rackspace.salus.telemetry.ambassador.config.AmbassadorProperties;
 import com.rackspace.salus.telemetry.etcd.services.EnvoyLabelManagement;
 import com.rackspace.salus.telemetry.etcd.services.EnvoyLeaseTracking;
-import com.rackspace.salus.telemetry.etcd.services.EnvoyNodeManagement;
+import com.rackspace.salus.telemetry.etcd.services.EnvoyResourceManagement;
+import com.rackspace.salus.telemetry.messaging.AttachEvent;
 import io.grpc.Status;
 import io.grpc.StatusException;
 import io.grpc.StatusRuntimeException;
 import io.grpc.stub.StreamObserver;
+import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.Collections;
 import java.util.List;
@@ -41,6 +46,7 @@ import java.util.stream.Collectors;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -50,11 +56,13 @@ import org.springframework.util.StringUtils;
 public class EnvoyRegistry {
 
     private final AmbassadorProperties appProperties;
+    private final KafkaTopicProperties kafkaTopics;
     private final EnvoyLabelManagement envoyLabelManagement;
     private final EnvoyLeaseTracking envoyLeaseTracking;
-    private final EnvoyNodeManagement envoyNodeManagement;
+    private final EnvoyResourceManagement envoyResourceManagement;
     private final LabelRulesProcessor labelRulesProcessor;
     private final JsonFormat.Printer jsonPrinter;
+    private final KafkaTemplate<String,Object> kafkaTemplate;
 
     @Data
     static class EnvoyEntry {
@@ -67,16 +75,21 @@ public class EnvoyRegistry {
     @SuppressWarnings("SpringJavaInjectionPointsAutowiringInspection")
     @Autowired
     public EnvoyRegistry(AmbassadorProperties appProperties,
+                         KafkaTopicProperties kafkaTopics,
                          EnvoyLabelManagement envoyLabelManagement,
                          EnvoyLeaseTracking envoyLeaseTracking,
-                         EnvoyNodeManagement envoyNodeManagement, LabelRulesProcessor labelRulesProcessor,
-                         JsonFormat.Printer jsonPrinter) {
+                         EnvoyResourceManagement envoyResourceManagement,
+                         LabelRulesProcessor labelRulesProcessor,
+                         JsonFormat.Printer jsonPrinter,
+                         KafkaTemplate<String,Object> kafkaTemplate) {
         this.appProperties = appProperties;
+        this.kafkaTopics = kafkaTopics;
         this.envoyLabelManagement = envoyLabelManagement;
         this.envoyLeaseTracking = envoyLeaseTracking;
-        this.envoyNodeManagement = envoyNodeManagement;
+        this.envoyResourceManagement = envoyResourceManagement;
         this.labelRulesProcessor = labelRulesProcessor;
         this.jsonPrinter = jsonPrinter;
+        this.kafkaTemplate = kafkaTemplate;
     }
 
     /**
@@ -87,6 +100,7 @@ public class EnvoyRegistry {
      * @param envoySummary
      * @param remoteAddr
      * @param instructionStreamObserver
+     * @return a {@link CompletableFuture} of the lease ID granted to the attached Envoy
      * @throws StatusException
      */
     public CompletableFuture<?> attach(String tenantId, String envoyId, EnvoySummary envoySummary,
@@ -105,12 +119,9 @@ public class EnvoyRegistry {
             throw new StatusException(Status.INVALID_ARGUMENT.withDescription(e.getMessage()));
         }
         final List<String> supportedAgentTypes = convertToStrings(envoySummary.getSupportedAgentsList());
-        final String identifier = envoySummary.getIdentifier();
-
-        if (!envoyLabels.containsKey(identifier)) {
-            throw new StatusException(Status.INVALID_ARGUMENT.withDescription(
-                    String.format("%s is not a valid value for the identifier",
-                    identifier)));
+        final String resourceId = envoySummary.getResourceId();
+        if (!StringUtils.hasText(resourceId)) {
+            throw new StatusException(Status.INVALID_ARGUMENT.withDescription("resourceId is required"));
         }
 
         EnvoyEntry existingEntry = envoys.get(envoyId);
@@ -121,8 +132,8 @@ public class EnvoyRegistry {
             envoyLeaseTracking.revoke(envoyId);
         }
 
-        log.info("Attaching envoy tenantId={}, envoyId={} from remoteAddr={} with identifier={}, labels={}, supports agents={}",
-            tenantId, envoyId, remoteAddr, identifier, envoyLabels, supportedAgentTypes);
+        log.info("Attaching envoy tenantId={}, envoyId={} from remoteAddr={} with resourceId={}, labels={}, supports agents={}",
+            tenantId, envoyId, remoteAddr, resourceId, envoyLabels, supportedAgentTypes);
 
         return envoyLeaseTracking.grant(envoyId)
             .thenCompose(leaseId -> {
@@ -163,15 +174,38 @@ public class EnvoyRegistry {
                 })
             )
             .thenCompose(leaseId ->
-                envoyNodeManagement.registerNode(tenantId, envoyId, leaseId, identifier, envoyLabels, remoteAddr)
+                envoyResourceManagement.registerResource(tenantId, envoyId, leaseId, resourceId, envoyLabels, remoteAddr)
                 .thenApply(putResponse -> {
-                    log.debug("Registered new envoy node for presence monitoring for " +
-                            "tenant={}, envoyId={}, identifier={}:{}",
-                            tenantId, envoyId, identifier, envoyLabels.get(identifier));
+                    log.debug("Registered new envoy resource for presence monitoring for " +
+                            "tenant={}, envoyId={}, resourceId={}",
+                            tenantId, envoyId, resourceId);
                     return leaseId;
                 })
-            );
+            )
+            .thenApply(leaseId ->  {
+                postAttachEvent(tenantId, envoyId, envoySummary, envoyLabels, remoteAddr);
+                return leaseId;
+            });
 
+    }
+
+    private void postAttachEvent(String tenantId, String envoyId, EnvoySummary envoySummary,
+                                 Map<String, String> envoyLabels,
+                                 SocketAddress remoteAddr) {
+
+        final String resourceId = envoySummary.getResourceId();
+        final AttachEvent attachEvent = new AttachEvent()
+            .setTenantId(tenantId)
+            .setEnvoyId(envoyId)
+            .setResourceId(resourceId)
+            .setEnvoyAddress(((InetSocketAddress) remoteAddr).getHostString())
+            .setLabels(envoyLabels);
+
+        kafkaTemplate.send(
+            kafkaTopics.getAttaches(),
+            buildMessageKey(attachEvent),
+            attachEvent
+        );
     }
 
     public boolean keepAlive(String instanceId, SocketAddress remoteAddr) {

@@ -1,15 +1,14 @@
 ambassador:
   envoyRefreshInterval: PT10S
-  kafka-topics:
-    LOG:
-      telemetry.logs.json
-    METRIC:
-      telemetry.metrics.json
 etcd:
   url: http://localhost:2479
 spring:
   resources:
+    # disable serving of static web files since this is a REST/Actuator only web app
     add-mappings: false
+  kafka:
+    producer:
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
 management.endpoints.web.exposure.include: "health,jolokia,metrics"
 management:
   metrics:

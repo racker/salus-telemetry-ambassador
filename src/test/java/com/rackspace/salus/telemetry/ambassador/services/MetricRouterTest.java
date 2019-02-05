@@ -25,7 +25,7 @@ import static org.mockito.Mockito.when;
 
 import com.rackspace.salus.services.TelemetryEdge;
 import com.rackspace.salus.telemetry.ambassador.config.AvroConfig;
-import com.rackspace.salus.telemetry.ambassador.types.KafkaMessageType;
+import com.rackspace.salus.telemetry.messaging.KafkaMessageType;
 import java.util.HashMap;
 import java.util.Map;
 import org.junit.Test;
@@ -80,7 +80,7 @@ public class MetricRouterTest {
 
         verify(envoyRegistry).getEnvoyLabels("envoy-1");
         verify(kafkaEgress).send("t1", KafkaMessageType.METRIC,
-            "{\"timestamp\":\"2018-10-08T20:30:13.123Z\",\"accountType\":\"RCN\",\"account\":\"t1\",\"device\":\"\",\"deviceLabel\":\"\",\"deviceMetadata\":{\"hostname\":\"host1\",\"os\":\"linux\"},\"monitoringSystem\":\"RMII\",\"systemMetadata\":{\"envoyId\":\"envoy-1\"},\"collectionName\":\"cpu\",\"collectionLabel\":\"\",\"collectionTarget\":\"\",\"collectionMetadata\":{\"cpu\":\"cpu1\"},\"ivalues\":{},\"fvalues\":{\"usage\":1.45},\"svalues\":{\"status\":\"enabled\"},\"units\":{}}");
+            "{\"timestamp\":\"2018-10-08T20:30:13.123Z\",\"accountType\":\"RCN\",\"account\":\"t1\",\"device\":\"\",\"deviceLabel\":\"\",\"deviceMetadata\":{\"hostname\":\"host1\",\"os\":\"linux\"},\"monitoringSystem\":\"SALUS\",\"systemMetadata\":{\"envoyId\":\"envoy-1\"},\"collectionName\":\"cpu\",\"collectionLabel\":\"\",\"collectionTarget\":\"\",\"collectionMetadata\":{\"cpu\":\"cpu1\"},\"ivalues\":{},\"fvalues\":{\"usage\":1.45},\"svalues\":{\"status\":\"enabled\"},\"units\":{}}");
 
         verifyNoMoreInteractions(kafkaEgress, envoyRegistry);
     }

@@ -18,8 +18,8 @@
 
 package com.rackspace.salus.telemetry.ambassador.services;
 
-import com.rackspace.salus.telemetry.ambassador.config.AmbassadorProperties;
-import com.rackspace.salus.telemetry.ambassador.types.KafkaMessageType;
+import com.rackspace.salus.common.messaging.KafkaTopicProperties;
+import com.rackspace.salus.telemetry.messaging.KafkaMessageType;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
@@ -28,18 +28,27 @@ import org.springframework.stereotype.Service;
 public class KafkaEgress {
 
     private final KafkaTemplate kafkaTemplate;
-    private final AmbassadorProperties ambassadorProperties;
+    private final KafkaTopicProperties kafkaTopics;
 
     @Autowired
-    public KafkaEgress(KafkaTemplate kafkaTemplate, AmbassadorProperties ambassadorProperties) {
+    public KafkaEgress(KafkaTemplate kafkaTemplate,
+                       KafkaTopicProperties kafkaTopics) {
         this.kafkaTemplate = kafkaTemplate;
-        this.ambassadorProperties = ambassadorProperties;
+        this.kafkaTopics = kafkaTopics;
     }
 
     public void send(String tenantId, KafkaMessageType messageType, String payload) {
-        final String topic = ambassadorProperties.getKafkaTopics().get(messageType);
-        if (topic == null) {
-            throw new IllegalArgumentException(String.format("No topic configured for %s", messageType));
+        final String topic;
+        switch (messageType) {
+            case METRIC:
+                topic = kafkaTopics.getMetrics();
+                break;
+            case LOG:
+                topic = kafkaTopics.getLogs();
+                break;
+            default:
+                throw new IllegalArgumentException(
+                    String.format("Unsupported messageType=%s for kafka routing", messageType));
         }
 
         kafkaTemplate.send(topic, tenantId, payload);
