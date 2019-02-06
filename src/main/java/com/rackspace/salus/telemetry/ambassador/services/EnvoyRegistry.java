@@ -1,19 +1,17 @@
 /*
- *    Copyright 2018 Rackspace US, Inc.
+ * Copyright 2019 Rackspace US, Inc.
  *
- *    Licensed under the Apache License, Version 2.0 (the "License");
- *    you may not use this file except in compliance with the License.
- *    You may obtain a copy of the License at
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- *        http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
- *    Unless required by applicable law or agreed to in writing, software
- *    distributed under the License is distributed on an "AS IS" BASIS,
- *    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *    See the License for the specific language governing permissions and
- *    limitations under the License.
- *
- *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 package com.rackspace.salus.telemetry.ambassador.services;
@@ -47,9 +45,11 @@ import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.kafka.support.SendResult;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
+import org.springframework.util.concurrent.ListenableFuture;
 
 @Service
 @Slf4j
@@ -158,6 +158,23 @@ public class EnvoyRegistry {
                 return leaseId;
             })
             .thenCompose(leaseId ->
+                postAttachEvent(tenantId, envoyId, envoySummary, envoyLabels, remoteAddr)
+                .thenApply(sendResult -> {
+                    log.debug("Posted attach event on partition={} for tenant={}, envoyId={}, resourceId={}",
+                        sendResult.getRecordMetadata().partition(),
+                        tenantId, envoyId, resourceId);
+                    return leaseId;
+                }))
+            .thenCompose(leaseId ->
+                envoyResourceManagement.registerResource(tenantId, envoyId, leaseId, resourceId, envoyLabels, remoteAddr)
+                    .thenApply(putResponse -> {
+                        log.debug("Registered new envoy resource for presence monitoring for " +
+                                "tenant={}, envoyId={}, resourceId={}",
+                            tenantId, envoyId, resourceId);
+                        return leaseId;
+                    })
+            )
+            .thenCompose(leaseId ->
                 envoyLabelManagement.pullAgentInstallsForEnvoy(tenantId, envoyId, leaseId, supportedAgentTypes, envoyLabels)
                     .thenApply(agentInstallCount -> {
                         log.debug("Pulled agent installs count={} for tenant={}, envoy={}",
@@ -167,31 +184,19 @@ public class EnvoyRegistry {
             )
             .thenCompose(leaseId ->
                 envoyLabelManagement.pullConfigsForEnvoy(tenantId, envoyId, leaseId, supportedAgentTypes, envoyLabels)
-                .thenApply(configCount -> {
-                    log.debug("Pulled configs count={} for tenant={}, envoy={}",
-                        configCount, tenantId, envoyId);
-                    return leaseId;
-                })
+                    .thenApply(configCount -> {
+                        log.debug("Pulled configs count={} for tenant={}, envoy={}",
+                            configCount, tenantId, envoyId);
+                        return leaseId;
+                    })
             )
-            .thenCompose(leaseId ->
-                envoyResourceManagement.registerResource(tenantId, envoyId, leaseId, resourceId, envoyLabels, remoteAddr)
-                .thenApply(putResponse -> {
-                    log.debug("Registered new envoy resource for presence monitoring for " +
-                            "tenant={}, envoyId={}, resourceId={}",
-                            tenantId, envoyId, resourceId);
-                    return leaseId;
-                })
-            )
-            .thenApply(leaseId ->  {
-                postAttachEvent(tenantId, envoyId, envoySummary, envoyLabels, remoteAddr);
-                return leaseId;
-            });
+            ;
 
     }
 
-    private void postAttachEvent(String tenantId, String envoyId, EnvoySummary envoySummary,
-                                 Map<String, String> envoyLabels,
-                                 SocketAddress remoteAddr) {
+    private CompletableFuture<SendResult<String, Object>> postAttachEvent(String tenantId, String envoyId, EnvoySummary envoySummary,
+                                                                          Map<String, String> envoyLabels,
+                                                                          SocketAddress remoteAddr) {
 
         final String resourceId = envoySummary.getResourceId();
         final AttachEvent attachEvent = new AttachEvent()
@@ -201,11 +206,13 @@ public class EnvoyRegistry {
             .setEnvoyAddress(((InetSocketAddress) remoteAddr).getHostString())
             .setLabels(envoyLabels);
 
-        kafkaTemplate.send(
+        final ListenableFuture<SendResult<String, Object>> sendResultFuture = kafkaTemplate.send(
             kafkaTopics.getAttaches(),
             buildMessageKey(attachEvent),
             attachEvent
         );
+
+        return sendResultFuture.completable();
     }
 
     public boolean keepAlive(String instanceId, SocketAddress remoteAddr) {
@@ -229,13 +236,17 @@ public class EnvoyRegistry {
             if (envoyEntry != null) {
                 try {
                     synchronized (envoyEntry.instructionStream) {
-                        envoyEntry.instructionStream.onNext(TelemetryEdge.EnvoyInstruction.newBuilder()
-                            .setRefresh(
-                                TelemetryEdge.EnvoyInstructionRefresh.newBuilder().build()
-                            )
-                            .build());
+                        envoyEntry.instructionStream
+                            .onNext(TelemetryEdge.EnvoyInstruction.newBuilder()
+                                .setRefresh(
+                                    TelemetryEdge.EnvoyInstructionRefresh.newBuilder().build()
+                                )
+                                .build());
                     }
-                } catch (StatusRuntimeException e) {
+                } catch (Exception e) {
+                    // Most likely exceptions are due to the gRPC connection being closed by
+                    // Envoy connection loss or failure to establish attachment. The later
+                    // gets thrown as an IllegalStateException.
                     processFailedSend(instanceId, e);
                 }
             }
@@ -247,9 +258,9 @@ public class EnvoyRegistry {
         envoyLeaseTracking.revoke(instanceId);
     }
 
-    private void processFailedSend(String instanceId, StatusRuntimeException e) {
-        log.info("Removing envoy stream for id={} due to status={}",
-            instanceId, e.getStatus());
+    private void processFailedSend(String instanceId, Exception e) {
+        log.info("Removing envoy stream for id={} due to exception={}",
+            instanceId, e.getMessage());
         remove(instanceId);
     }
 
