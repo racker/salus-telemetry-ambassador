@@ -8,7 +8,7 @@ spring:
     add-mappings: false
   kafka:
     producer:
-      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
 management.endpoints.web.exposure.include: "health,jolokia,metrics"
 management:
   metrics:
