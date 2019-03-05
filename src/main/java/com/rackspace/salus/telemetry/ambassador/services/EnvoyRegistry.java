@@ -18,7 +18,6 @@ package com.rackspace.salus.telemetry.ambassador.services;
 
 import static com.rackspace.salus.common.messaging.KafkaMessageKeyBuilder.buildMessageKey;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.util.JsonFormat;
@@ -187,14 +186,6 @@ public class EnvoyRegistry {
                         return leaseId;
                     })
             )
-            .thenCompose(leaseId ->
-                envoyLabelManagement.pullConfigsForEnvoy(tenantId, envoyId, leaseId, supportedAgentTypes, envoyLabels)
-                    .thenApply(configCount -> {
-                        log.debug("Pulled configs count={} for tenant={}, envoy={}",
-                            configCount, tenantId, envoyId);
-                        return leaseId;
-                    })
-            )
             ;
 
     }
@@ -212,16 +203,11 @@ public class EnvoyRegistry {
             .setLabels(envoyLabels);
 
         final ListenableFuture<SendResult<String, Object>> sendResultFuture;
-        try {
-            sendResultFuture = kafkaTemplate.send(
-                kafkaTopics.getAttaches(),
-                buildMessageKey(attachEvent),
-                objectMapper.writeValueAsString(attachEvent)
-            );
-        } catch (JsonProcessingException e) {
-            log.error("Failed to serialize attachEvent={}", attachEvent, e);
-            throw new IllegalStateException(e);
-        }
+        sendResultFuture = kafkaTemplate.send(
+            kafkaTopics.getAttaches(),
+            buildMessageKey(attachEvent),
+            attachEvent
+        );
 
         return sendResultFuture.completable();
     }

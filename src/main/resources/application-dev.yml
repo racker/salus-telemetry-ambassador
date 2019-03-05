@@ -3,3 +3,4 @@ server:
 logging:
   level:
     com.rackspace.salus: debug
+    com.rackspace.salus.telemetry.ambassador.services.MonitorEventListener: trace

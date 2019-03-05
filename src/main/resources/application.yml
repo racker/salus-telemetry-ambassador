@@ -8,7 +8,16 @@ spring:
     add-mappings: false
   kafka:
     producer:
-      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: com.rackspace.salus.telemetry.ambassador.services.StringSafeJsonSerializer
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+    consumer:
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring:
+          json:
+            trusted:
+              packages: com.rackspace.salus.telemetry.messaging
 management.endpoints.web.exposure.include: "health,jolokia,metrics"
 management:
   metrics:
