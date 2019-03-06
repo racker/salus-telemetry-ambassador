@@ -2,6 +2,7 @@ package com.rackspace.salus.telemetry.ambassador.services;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -20,6 +21,8 @@ import io.grpc.stub.StreamObserver;
 import java.net.InetSocketAddress;
 import java.util.Collections;
 import java.util.concurrent.CompletableFuture;
+import org.apache.kafka.clients.producer.RecordMetadata;
+import org.apache.kafka.common.TopicPartition;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
@@ -28,7 +31,10 @@ import org.springframework.boot.test.autoconfigure.json.JsonTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.kafka.support.SendResult;
 import org.springframework.test.context.junit4.SpringRunner;
+import org.springframework.util.concurrent.CompletableToListenableFutureAdapter;
+import org.springframework.util.concurrent.ListenableFuture;
 
 @RunWith(SpringRunner.class)
 @JsonTest
@@ -81,6 +87,14 @@ public class EnvoyRegistryTest {
 
     when(envoyResourceManagement.registerResource(any(), any(), anyLong(), any(), any(), any()))
         .thenReturn(CompletableFuture.completedFuture(new ResourceInfo()));
+
+    RecordMetadata recordMetadata = new RecordMetadata(
+        new TopicPartition("telemetry.attaches.json", 0),
+        0, 0, 0, null, 0, 0);
+    SendResult sendResult = new SendResult(null, recordMetadata);
+    ListenableFuture lf = new CompletableToListenableFutureAdapter(CompletableFuture.completedFuture(sendResult));
+    when(kafkaTemplate.send(anyString(), anyString(), any()))
+        .thenReturn(lf);
 
     envoyRegistry.attach("t-1", "e-1", envoySummary,
         InetSocketAddress.createUnresolved("localhost", 60000), streamObserver

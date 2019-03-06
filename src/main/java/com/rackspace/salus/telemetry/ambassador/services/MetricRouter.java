@@ -63,6 +63,8 @@ public class MetricRouter {
             throw new IllegalArgumentException("Unable to find Envoy in the registry");
         }
 
+        final String resourceId = envoyRegistry.getResourceId(envoyId);
+
         final TelemetryEdge.NameTagValueMetric nameTagValue = postedMetric.getMetric().getNameTagValue();
         if (nameTagValue == null) {
             throw new IllegalArgumentException("Only supports metrics posted with NameTagValue variant");
@@ -74,6 +76,7 @@ public class MetricRouter {
             .setAccountType(AccountType.RCN)
             .setAccount(tenantId)
             .setTimestamp(universalTimestampFormatter.format(timestamp))
+            .setDevice(resourceId)
             .setDeviceMetadata(envoyLabels)
             .setMonitoringSystem(MonitoringSystem.SALUS)
             .setSystemMetadata(Collections.singletonMap("envoyId", envoyId))

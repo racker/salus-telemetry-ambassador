@@ -18,8 +18,6 @@ package com.rackspace.salus.telemetry.ambassador.services;
 
 import static com.rackspace.salus.common.messaging.KafkaMessageKeyBuilder.buildMessageKey;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.util.JsonFormat;
 import com.rackspace.salus.common.messaging.KafkaTopicProperties;
@@ -65,12 +63,12 @@ public class EnvoyRegistry {
     private final LabelRulesProcessor labelRulesProcessor;
     private final JsonFormat.Printer jsonPrinter;
     private final KafkaTemplate<String,Object> kafkaTemplate;
-    private final ObjectMapper objectMapper;
 
     @Data
     static class EnvoyEntry {
         final StreamObserver<TelemetryEdge.EnvoyInstruction> instructionStream;
         final Map<String,String> labels;
+        final String resourceId;
     }
 
     private ConcurrentHashMap<String, EnvoyEntry> envoys = new ConcurrentHashMap<>();
@@ -84,8 +82,7 @@ public class EnvoyRegistry {
                          EnvoyResourceManagement envoyResourceManagement,
                          LabelRulesProcessor labelRulesProcessor,
                          JsonFormat.Printer jsonPrinter,
-                         KafkaTemplate<String,Object> kafkaTemplate,
-                         ObjectMapper objectMapper) {
+                         KafkaTemplate<String, Object> kafkaTemplate) {
         this.appProperties = appProperties;
         this.kafkaTopics = kafkaTopics;
         this.envoyLabelManagement = envoyLabelManagement;
@@ -94,7 +91,6 @@ public class EnvoyRegistry {
         this.labelRulesProcessor = labelRulesProcessor;
         this.jsonPrinter = jsonPrinter;
         this.kafkaTemplate = kafkaTemplate;
-        this.objectMapper = objectMapper;
     }
 
     /**
@@ -159,7 +155,7 @@ public class EnvoyRegistry {
 
             })
             .thenApply(leaseId -> {
-                envoys.put(envoyId, new EnvoyEntry(instructionStreamObserver, envoyLabels));
+                envoys.put(envoyId, new EnvoyEntry(instructionStreamObserver, envoyLabels, resourceId));
                 return leaseId;
             })
             .thenCompose(leaseId ->
@@ -187,14 +183,6 @@ public class EnvoyRegistry {
                         return leaseId;
                     })
             )
-            .thenCompose(leaseId ->
-                envoyLabelManagement.pullConfigsForEnvoy(tenantId, envoyId, leaseId, supportedAgentTypes, envoyLabels)
-                    .thenApply(configCount -> {
-                        log.debug("Pulled configs count={} for tenant={}, envoy={}",
-                            configCount, tenantId, envoyId);
-                        return leaseId;
-                    })
-            )
             ;
 
     }
@@ -212,16 +200,11 @@ public class EnvoyRegistry {
             .setLabels(envoyLabels);
 
         final ListenableFuture<SendResult<String, Object>> sendResultFuture;
-        try {
-            sendResultFuture = kafkaTemplate.send(
-                kafkaTopics.getAttaches(),
-                buildMessageKey(attachEvent),
-                objectMapper.writeValueAsString(attachEvent)
-            );
-        } catch (JsonProcessingException e) {
-            log.error("Failed to serialize attachEvent={}", attachEvent, e);
-            throw new IllegalStateException(e);
-        }
+        sendResultFuture = kafkaTemplate.send(
+            kafkaTopics.getAttaches(),
+            buildMessageKey(attachEvent),
+            attachEvent
+        );
 
         return sendResultFuture.completable();
     }
@@ -283,6 +266,12 @@ public class EnvoyRegistry {
         final EnvoyEntry entry = envoys.get(envoyInstanceId);
         return entry != null ? entry.labels : Collections.emptyMap();
     }
+
+    public String getResourceId(String envoyInstanceId) {
+        final EnvoyEntry entry = envoys.get(envoyInstanceId);
+        return entry != null ? entry.getResourceId() : null;
+    }
+
 
     public void sendInstruction(String envoyInstanceId, TelemetryEdge.EnvoyInstruction instruction) {
         final EnvoyEntry envoyEntry = envoys.get(envoyInstanceId);
