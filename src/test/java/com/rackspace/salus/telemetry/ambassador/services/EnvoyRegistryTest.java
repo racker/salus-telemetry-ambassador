@@ -82,9 +82,6 @@ public class EnvoyRegistryTest {
     when(envoyLabelManagement.pullAgentInstallsForEnvoy(any(), any(), any(), any(), any()))
         .thenReturn(CompletableFuture.completedFuture(0));
 
-    when(envoyLabelManagement.pullConfigsForEnvoy(any(), any(), any(), any(), any()))
-        .thenReturn(CompletableFuture.completedFuture(0));
-
     when(envoyResourceManagement.registerResource(any(), any(), anyLong(), any(), any(), any()))
         .thenReturn(CompletableFuture.completedFuture(new ResourceInfo()));
 
