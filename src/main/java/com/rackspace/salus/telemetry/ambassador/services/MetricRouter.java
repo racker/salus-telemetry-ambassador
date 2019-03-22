@@ -18,9 +18,9 @@
 
 package com.rackspace.salus.telemetry.ambassador.services;
 
-import com.rackspace.salus.model.AccountType;
-import com.rackspace.salus.model.ExternalMetric;
-import com.rackspace.salus.model.MonitoringSystem;
+import com.rackspace.monplat.protocol.AccountType;
+import com.rackspace.monplat.protocol.ExternalMetric;
+import com.rackspace.monplat.protocol.MonitoringSystem;
 import com.rackspace.salus.services.TelemetryEdge;
 import com.rackspace.salus.services.TelemetryEdge.PostedMetric;
 import com.rackspace.salus.telemetry.messaging.KafkaMessageType;
