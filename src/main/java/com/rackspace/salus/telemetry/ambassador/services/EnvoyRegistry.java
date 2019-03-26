@@ -17,6 +17,7 @@
 package com.rackspace.salus.telemetry.ambassador.services;
 
 import static com.rackspace.salus.common.messaging.KafkaMessageKeyBuilder.buildMessageKey;
+import static com.rackspace.salus.telemetry.model.LabelNamespaces.applyNamespace;
 
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.util.JsonFormat;
@@ -29,6 +30,7 @@ import com.rackspace.salus.telemetry.etcd.services.EnvoyLabelManagement;
 import com.rackspace.salus.telemetry.etcd.services.EnvoyLeaseTracking;
 import com.rackspace.salus.telemetry.etcd.services.EnvoyResourceManagement;
 import com.rackspace.salus.telemetry.messaging.AttachEvent;
+import com.rackspace.salus.telemetry.model.LabelNamespaces;
 import io.grpc.Status;
 import io.grpc.StatusException;
 import io.grpc.StatusRuntimeException;
@@ -60,7 +62,6 @@ public class EnvoyRegistry {
     private final EnvoyLabelManagement envoyLabelManagement;
     private final EnvoyLeaseTracking envoyLeaseTracking;
     private final EnvoyResourceManagement envoyResourceManagement;
-    private final LabelRulesProcessor labelRulesProcessor;
     private final JsonFormat.Printer jsonPrinter;
     private final KafkaTemplate<String,Object> kafkaTemplate;
 
@@ -80,7 +81,6 @@ public class EnvoyRegistry {
                          EnvoyLabelManagement envoyLabelManagement,
                          EnvoyLeaseTracking envoyLeaseTracking,
                          EnvoyResourceManagement envoyResourceManagement,
-                         LabelRulesProcessor labelRulesProcessor,
                          JsonFormat.Printer jsonPrinter,
                          KafkaTemplate<String, Object> kafkaTemplate) {
         this.appProperties = appProperties;
@@ -88,7 +88,6 @@ public class EnvoyRegistry {
         this.envoyLabelManagement = envoyLabelManagement;
         this.envoyLeaseTracking = envoyLeaseTracking;
         this.envoyResourceManagement = envoyResourceManagement;
-        this.labelRulesProcessor = labelRulesProcessor;
         this.jsonPrinter = jsonPrinter;
         this.kafkaTemplate = kafkaTemplate;
     }
@@ -113,12 +112,8 @@ public class EnvoyRegistry {
             throw new StatusException(Status.INVALID_ARGUMENT.withDescription("tenantId is missing from request"));
         }
 
-        final Map<String, String> envoyLabels;
-        try {
-            envoyLabels = labelRulesProcessor.process(envoySummary.getLabelsMap());
-        } catch (IllegalArgumentException e) {
-            throw new StatusException(Status.INVALID_ARGUMENT.withDescription(e.getMessage()));
-        }
+        final Map<String, String> envoyLabels = processEnvoyLabels(envoySummary);
+
         final List<String> supportedAgentTypes = convertToStrings(envoySummary.getSupportedAgentsList());
         final String resourceId = envoySummary.getResourceId();
         if (!StringUtils.hasText(resourceId)) {
@@ -185,6 +180,16 @@ public class EnvoyRegistry {
             )
             ;
 
+    }
+
+    private Map<String, String> processEnvoyLabels(EnvoySummary envoySummary) {
+
+        // apply a namespace to the label names
+        return envoySummary.getLabelsMap().entrySet().stream()
+            .collect(Collectors.toMap(
+                entry -> applyNamespace(LabelNamespaces.AGENT, entry.getKey()),
+                Map.Entry::getValue
+            ));
     }
 
     private CompletableFuture<SendResult<String, Object>> postAttachEvent(String tenantId, String envoyId, EnvoySummary envoySummary,

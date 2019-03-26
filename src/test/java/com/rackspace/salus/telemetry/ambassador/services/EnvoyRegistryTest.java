@@ -41,7 +41,6 @@ import org.springframework.util.concurrent.ListenableFuture;
 @Import({
     EnvoyRegistry.class,
     AmbassadorProperties.class,
-    LabelRulesProcessor.class,
     GrpcConfig.class
 })
 public class EnvoyRegistryTest {
@@ -68,7 +67,7 @@ public class EnvoyRegistryTest {
   public void postsAttachEventOnAttach() throws StatusException {
     final EnvoySummary envoySummary = EnvoySummary.newBuilder()
         .setResourceId("hostname:test-host")
-        .putLabels("os", "linux")
+        .putLabels("discovered.os", "linux")
         .build();
 
     final CompletableFuture<Long> assignedLease = CompletableFuture.completedFuture(1234L);
@@ -103,7 +102,7 @@ public class EnvoyRegistryTest {
             "t-1:hostname:test-host",
             new AttachEvent()
                 .setResourceId("hostname:test-host")
-                .setLabels(Collections.singletonMap("os", "LINUX"))
+                .setLabels(Collections.singletonMap("agent.discovered.os", "linux"))
                 .setEnvoyId("e-1")
                 .setTenantId("t-1")
                 .setEnvoyAddress("localhost")
