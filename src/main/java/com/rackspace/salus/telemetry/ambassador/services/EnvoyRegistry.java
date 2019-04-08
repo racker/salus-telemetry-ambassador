@@ -26,15 +26,19 @@ import com.rackspace.salus.services.TelemetryEdge;
 import com.rackspace.salus.services.TelemetryEdge.EnvoyInstruction;
 import com.rackspace.salus.services.TelemetryEdge.EnvoySummary;
 import com.rackspace.salus.telemetry.ambassador.config.AmbassadorProperties;
+import com.rackspace.salus.telemetry.ambassador.types.ZoneNotAuthorizedException;
 import com.rackspace.salus.telemetry.etcd.services.EnvoyLabelManagement;
 import com.rackspace.salus.telemetry.etcd.services.EnvoyLeaseTracking;
 import com.rackspace.salus.telemetry.etcd.services.EnvoyResourceManagement;
+import com.rackspace.salus.telemetry.etcd.types.ResolvedZone;
 import com.rackspace.salus.telemetry.messaging.AttachEvent;
 import com.rackspace.salus.telemetry.model.LabelNamespaces;
 import io.grpc.Status;
 import io.grpc.StatusException;
 import io.grpc.StatusRuntimeException;
 import io.grpc.stub.StreamObserver;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.Collections;
@@ -62,8 +66,10 @@ public class EnvoyRegistry {
     private final EnvoyLabelManagement envoyLabelManagement;
     private final EnvoyLeaseTracking envoyLeaseTracking;
     private final EnvoyResourceManagement envoyResourceManagement;
+    private final ZoneAuthorizer zoneAuthorizer;
     private final JsonFormat.Printer jsonPrinter;
     private final KafkaTemplate<String,Object> kafkaTemplate;
+    private final Counter unauthorizedZoneCounter;
 
     @Data
     static class EnvoyEntry {
@@ -81,25 +87,30 @@ public class EnvoyRegistry {
                          EnvoyLabelManagement envoyLabelManagement,
                          EnvoyLeaseTracking envoyLeaseTracking,
                          EnvoyResourceManagement envoyResourceManagement,
+                         ZoneAuthorizer zoneAuthorizer,
                          JsonFormat.Printer jsonPrinter,
-                         KafkaTemplate<String, Object> kafkaTemplate) {
+                         KafkaTemplate<String, Object> kafkaTemplate,
+                         MeterRegistry meterRegistry) {
         this.appProperties = appProperties;
         this.kafkaTopics = kafkaTopics;
         this.envoyLabelManagement = envoyLabelManagement;
         this.envoyLeaseTracking = envoyLeaseTracking;
         this.envoyResourceManagement = envoyResourceManagement;
+        this.zoneAuthorizer = zoneAuthorizer;
         this.jsonPrinter = jsonPrinter;
         this.kafkaTemplate = kafkaTemplate;
+
+        unauthorizedZoneCounter = meterRegistry.counter("attachErrors", "type", "unauthorizedZone");
     }
 
     /**
      * Executed whenever we receive a new connection from an envoy.
      *
-     * @param tenantId
-     * @param envoyId
-     * @param envoySummary
-     * @param remoteAddr
-     * @param instructionStreamObserver
+     * @param tenantId tenant of the attached Envoy
+     * @param envoyId the Envoy's UUID
+     * @param envoySummary the Envoy summary
+     * @param remoteAddr the remote IP+port of the Envoy
+     * @param instructionStreamObserver the response stream
      * @return a {@link CompletableFuture} of the lease ID granted to the attached Envoy
      * @throws StatusException
      */
@@ -107,14 +118,18 @@ public class EnvoyRegistry {
                                             SocketAddress remoteAddr, StreamObserver<EnvoyInstruction> instructionStreamObserver)
                 throws StatusException {
 
-        if (StringUtils.isEmpty(envoyId)) {
-            log.warn("Envoy attachment from remoteAddr={} is missing tenantId", remoteAddr);
-            throw new StatusException(Status.INVALID_ARGUMENT.withDescription("tenantId is missing from request"));
+        final ResolvedZone zone;
+        try {
+            zone = zoneAuthorizer.authorize(tenantId, envoySummary.getZone());
+        } catch (ZoneNotAuthorizedException e) {
+            unauthorizedZoneCounter.increment();
+            log.warn("Envoy attachment from remoteAddr={} is unauthorized: {}", remoteAddr, e.getMessage());
+            throw new StatusException(Status.INVALID_ARGUMENT.withDescription(e.getMessage()));
         }
 
         final Map<String, String> envoyLabels = processEnvoyLabels(envoySummary);
-
         final List<String> supportedAgentTypes = convertToStrings(envoySummary.getSupportedAgentsList());
+
         final String resourceId = envoySummary.getResourceId();
         if (!StringUtils.hasText(resourceId)) {
             throw new StatusException(Status.INVALID_ARGUMENT.withDescription("resourceId is required"));
@@ -128,8 +143,8 @@ public class EnvoyRegistry {
             envoyLeaseTracking.revoke(envoyId);
         }
 
-        log.info("Attaching envoy tenantId={}, envoyId={} from remoteAddr={} with resourceId={}, labels={}, supports agents={}",
-            tenantId, envoyId, remoteAddr, resourceId, envoyLabels, supportedAgentTypes);
+        log.info("Attaching envoy tenantId={}, envoyId={} from remoteAddr={} with resourceId={}, zone={}, labels={}, supports agents={}",
+            tenantId, envoyId, remoteAddr, resourceId, zone, envoyLabels, supportedAgentTypes);
 
         return envoyLeaseTracking.grant(envoyId)
             .thenCompose(leaseId -> {
