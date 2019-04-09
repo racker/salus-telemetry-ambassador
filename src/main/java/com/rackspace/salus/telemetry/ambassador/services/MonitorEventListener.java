@@ -17,13 +17,18 @@
 package com.rackspace.salus.telemetry.ambassador.services;
 
 import com.rackspace.salus.common.messaging.KafkaTopicProperties;
+import com.rackspace.salus.monitor_management.entities.BoundMonitor;
+import com.rackspace.salus.monitor_management.web.client.MonitorApi;
 import com.rackspace.salus.services.TelemetryEdge;
 import com.rackspace.salus.services.TelemetryEdge.ConfigurationOp.Type;
+import com.rackspace.salus.telemetry.ambassador.types.BoundMonitorChanges;
+import com.rackspace.salus.telemetry.messaging.MonitorBoundEvent;
 import com.rackspace.salus.telemetry.messaging.MonitorEvent;
 import com.rackspace.salus.telemetry.messaging.OperationType;
 import com.rackspace.salus.telemetry.model.AgentConfig;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
+import java.util.List;
 import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.common.TopicPartition;
@@ -38,12 +43,15 @@ public class MonitorEventListener implements ConsumerSeekAware {
 
   private final String topic;
   private final EnvoyRegistry envoyRegistry;
+  private final MonitorApi monitorApi;
 
   @Autowired
   public MonitorEventListener(KafkaTopicProperties kafkaTopicProperties,
-                              EnvoyRegistry envoyRegistry) {
+                              EnvoyRegistry envoyRegistry,
+                              MonitorApi monitorApi) {
     this.topic = kafkaTopicProperties.getMonitors();
     this.envoyRegistry = envoyRegistry;
+    this.monitorApi = monitorApi;
   }
 
   public String getTopic() {
@@ -80,6 +88,22 @@ public class MonitorEventListener implements ConsumerSeekAware {
 
     envoyRegistry.sendInstruction(event.getEnvoyId(), instruction);
 
+  }
+
+  @KafkaListener(topics = "#{__listener.topic}", groupId = "#{__listener.groupId}")
+  public void handleMessage(MonitorBoundEvent event) {
+    final String envoyId = event.getEnvoyId();
+
+    if (!envoyRegistry.contains(envoyId)) {
+      log.trace("Discarded monitorEvent={} for unregistered Envoy", event);
+      return;
+    }
+
+    log.debug("Handling monitorBoundEvent={}", event);
+
+    final List<BoundMonitor> boundMonitors = monitorApi.getBoundMonitors(envoyId);
+
+    final BoundMonitorChanges changes = envoyRegistry.applyBoundMonitors(envoyId, boundMonitors);
   }
 
   private Type convertOpType(OperationType operationType) {

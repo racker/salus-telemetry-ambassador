@@ -19,17 +19,23 @@ package com.rackspace.salus.telemetry.ambassador.services;
 import static com.rackspace.salus.common.messaging.KafkaMessageKeyBuilder.buildMessageKey;
 import static com.rackspace.salus.telemetry.model.LabelNamespaces.applyNamespace;
 
+import com.google.common.hash.HashCode;
+import com.google.common.hash.HashFunction;
+import com.google.common.hash.Hashing;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.util.JsonFormat;
 import com.rackspace.salus.common.messaging.KafkaTopicProperties;
+import com.rackspace.salus.monitor_management.entities.BoundMonitor;
 import com.rackspace.salus.services.TelemetryEdge;
 import com.rackspace.salus.services.TelemetryEdge.EnvoyInstruction;
 import com.rackspace.salus.services.TelemetryEdge.EnvoySummary;
 import com.rackspace.salus.telemetry.ambassador.config.AmbassadorProperties;
+import com.rackspace.salus.telemetry.ambassador.types.BoundMonitorChanges;
 import com.rackspace.salus.telemetry.ambassador.types.ZoneNotAuthorizedException;
 import com.rackspace.salus.telemetry.etcd.services.EnvoyLabelManagement;
 import com.rackspace.salus.telemetry.etcd.services.EnvoyLeaseTracking;
 import com.rackspace.salus.telemetry.etcd.services.EnvoyResourceManagement;
+import com.rackspace.salus.telemetry.etcd.services.ZoneStorage;
 import com.rackspace.salus.telemetry.etcd.types.ResolvedZone;
 import com.rackspace.salus.telemetry.messaging.AttachEvent;
 import com.rackspace.salus.telemetry.model.LabelNamespaces;
@@ -41,9 +47,14 @@ import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.nio.charset.StandardCharsets;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
@@ -67,15 +78,22 @@ public class EnvoyRegistry {
     private final EnvoyLeaseTracking envoyLeaseTracking;
     private final EnvoyResourceManagement envoyResourceManagement;
     private final ZoneAuthorizer zoneAuthorizer;
+    private final ZoneStorage zoneStorage;
     private final JsonFormat.Printer jsonPrinter;
     private final KafkaTemplate<String,Object> kafkaTemplate;
     private final Counter unauthorizedZoneCounter;
+    private final HashFunction boundMonitorHashFunction;
 
     @Data
     static class EnvoyEntry {
         final StreamObserver<TelemetryEdge.EnvoyInstruction> instructionStream;
         final Map<String,String> labels;
         final String resourceId;
+
+      /**
+       * Maps monitorId to a hash of its the bound monitor's rendered content
+       */
+      Map<UUID, HashCode> boundMonitors = new HashMap<>();
     }
 
     private ConcurrentHashMap<String, EnvoyEntry> envoys = new ConcurrentHashMap<>();
@@ -88,6 +106,7 @@ public class EnvoyRegistry {
                          EnvoyLeaseTracking envoyLeaseTracking,
                          EnvoyResourceManagement envoyResourceManagement,
                          ZoneAuthorizer zoneAuthorizer,
+                         ZoneStorage zoneStorage,
                          JsonFormat.Printer jsonPrinter,
                          KafkaTemplate<String, Object> kafkaTemplate,
                          MeterRegistry meterRegistry) {
@@ -97,8 +116,10 @@ public class EnvoyRegistry {
         this.envoyLeaseTracking = envoyLeaseTracking;
         this.envoyResourceManagement = envoyResourceManagement;
         this.zoneAuthorizer = zoneAuthorizer;
+        this.zoneStorage = zoneStorage;
         this.jsonPrinter = jsonPrinter;
         this.kafkaTemplate = kafkaTemplate;
+        this.boundMonitorHashFunction = Hashing.adler32();
 
         unauthorizedZoneCounter = meterRegistry.counter("attachErrors", "type", "unauthorizedZone");
     }
@@ -168,6 +189,12 @@ public class EnvoyRegistry {
                 envoys.put(envoyId, new EnvoyEntry(instructionStreamObserver, envoyLabels, resourceId));
                 return leaseId;
             })
+            .thenCompose(leaseId ->
+                zoneStorage.registerEnvoyInZone(zone, envoyId, leaseId)
+                    .thenApply(result -> {
+                      log.debug("Registered envoyId={} in zone={}", envoyId, zone);
+                      return leaseId;
+                    }))
             .thenCompose(leaseId ->
                 postAttachEvent(tenantId, envoyId, envoySummary, envoyLabels, remoteAddr)
                 .thenApply(sendResult -> {
@@ -312,4 +339,66 @@ public class EnvoyRegistry {
                 envoyInstanceId, instruction);
         }
     }
+
+    void createTestingEntry(String envoyId) {
+      envoys.put(envoyId, new EnvoyEntry(null, null, null));
+    }
+
+    @SuppressWarnings("UnstableApiUsage")
+    public BoundMonitorChanges applyBoundMonitors(String envoyId, List<BoundMonitor> boundMonitors) {
+      final EnvoyEntry entry = envoys.get(envoyId);
+      if (entry == null) {
+        return null;
+      }
+
+      final BoundMonitorChanges changes = new BoundMonitorChanges();
+
+      synchronized (entry.getBoundMonitors()) {
+        final Map<UUID, HashCode> bindings = entry.getBoundMonitors();
+        // This will be used to track monitors that got removed by starting with all, but
+        // incrementally removing from this set as they're seen in the incoming bound monitors
+        final Set<UUID> staleMonitorIds = new HashSet<>(bindings.keySet());
+
+        for (BoundMonitor boundMonitor : boundMonitors) {
+
+          final UUID monitorId = boundMonitor.getMonitorId();
+          staleMonitorIds.remove(monitorId);
+
+          final HashCode prevHashCode = bindings.get(monitorId);
+
+          if (prevHashCode == null) {
+            // CREATED
+            changes.getCreated().add(boundMonitor);
+            bindings.put(monitorId, hashRenderedContent(boundMonitor));
+          }
+          else {
+            // Possibly modified
+
+            final HashCode newHashCode = hashRenderedContent(boundMonitor);
+
+            if (!newHashCode.equals(prevHashCode)) {
+              // MODIFIED
+              changes.getModified().add(boundMonitor);
+              bindings.put(monitorId, newHashCode);
+            }
+          }
+        }
+
+        // And removed ones are all those left over
+        changes.setRemoved(staleMonitorIds);
+        // Changes to a map's keySet will apply to the backing map, so use this operation
+        // to remove all the monitors that were not included in incoming set
+        bindings.keySet().removeAll(staleMonitorIds);
+      }
+
+      return changes;
+    }
+
+  @SuppressWarnings("UnstableApiUsage")
+  private HashCode hashRenderedContent(BoundMonitor boundMonitor) {
+    return boundMonitorHashFunction.hashString(boundMonitor.getRenderedContent(),
+        StandardCharsets.UTF_8
+    );
+  }
+
 }

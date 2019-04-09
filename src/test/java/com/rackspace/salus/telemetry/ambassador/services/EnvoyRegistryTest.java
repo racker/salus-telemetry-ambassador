@@ -1,15 +1,23 @@
 package com.rackspace.salus.telemetry.ambassador.services;
 
+import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.hasProperty;
+import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.notNullValue;
+import static org.junit.Assert.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.rackspace.salus.monitor_management.entities.BoundMonitor;
 import com.rackspace.salus.services.TelemetryEdge.EnvoyInstruction;
 import com.rackspace.salus.services.TelemetryEdge.EnvoySummary;
 import com.rackspace.salus.telemetry.ambassador.config.AmbassadorProperties;
 import com.rackspace.salus.telemetry.ambassador.config.GrpcConfig;
+import com.rackspace.salus.telemetry.ambassador.types.BoundMonitorChanges;
 import com.rackspace.salus.telemetry.etcd.EtcdUtils;
 import com.rackspace.salus.telemetry.etcd.services.EnvoyLabelManagement;
 import com.rackspace.salus.telemetry.etcd.services.EnvoyLeaseTracking;
@@ -18,8 +26,12 @@ import com.rackspace.salus.telemetry.messaging.AttachEvent;
 import com.rackspace.salus.telemetry.model.ResourceInfo;
 import io.grpc.StatusException;
 import io.grpc.stub.StreamObserver;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.net.InetSocketAddress;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import org.apache.kafka.clients.producer.RecordMetadata;
 import org.apache.kafka.common.TopicPartition;
@@ -41,7 +53,8 @@ import org.springframework.util.concurrent.ListenableFuture;
 @Import({
     EnvoyRegistry.class,
     AmbassadorProperties.class,
-    GrpcConfig.class
+    GrpcConfig.class,
+    SimpleMeterRegistry.class
 })
 public class EnvoyRegistryTest {
 
@@ -53,6 +66,9 @@ public class EnvoyRegistryTest {
 
   @MockBean
   EnvoyResourceManagement envoyResourceManagement;
+
+  @MockBean
+  ZoneAuthorizer zoneAuthorizer;
 
   @MockBean
   KafkaTemplate kafkaTemplate;
@@ -86,9 +102,11 @@ public class EnvoyRegistryTest {
 
     RecordMetadata recordMetadata = new RecordMetadata(
         new TopicPartition("telemetry.attaches.json", 0),
-        0, 0, 0, null, 0, 0);
+        0, 0, 0, null, 0, 0
+    );
     SendResult sendResult = new SendResult(null, recordMetadata);
-    ListenableFuture lf = new CompletableToListenableFutureAdapter(CompletableFuture.completedFuture(sendResult));
+    ListenableFuture lf = new CompletableToListenableFutureAdapter(
+        CompletableFuture.completedFuture(sendResult));
     when(kafkaTemplate.send(anyString(), anyString(), any()))
         .thenReturn(lf);
 
@@ -130,5 +148,68 @@ public class EnvoyRegistryTest {
     envoyRegistry.attach("t-1", "e-1", envoySummary,
         InetSocketAddress.createUnresolved("localhost", 60000), streamObserver
     ).join();
+  }
+
+  @Test
+  public void testApplyBoundMonitors() {
+    envoyRegistry.createTestingEntry("e-1");
+
+    final UUID id1 = UUID.fromString("16caf730-48e8-47ba-0001-aa9babba8953");
+    final UUID id2 = UUID.fromString("16caf730-48e8-47ba-0002-aa9babba8953");
+    final UUID id3 = UUID.fromString("16caf730-48e8-47ba-0003-aa9babba8953");
+    final UUID id4 = UUID.fromString("16caf730-48e8-47ba-0004-aa9babba8953");
+
+    {
+      final List<BoundMonitor> boundMonitors = Arrays.asList(
+          new BoundMonitor()
+              .setMonitorId(id1)
+              .setRenderedContent("{\"instance\":1, \"state\":1}"),
+          new BoundMonitor()
+              .setMonitorId(id2)
+              .setRenderedContent("{\"instance\":2, \"state\":1}"),
+          new BoundMonitor()
+              .setMonitorId(id3)
+              .setRenderedContent("{\"instance\":3, \"state\":1}")
+      );
+
+      final BoundMonitorChanges changes = envoyRegistry
+          .applyBoundMonitors("e-1", boundMonitors);
+
+      assertThat(changes, notNullValue());
+      assertThat(changes.getCreated(), hasSize(3));
+      assertThat(changes.getModified(), hasSize(0));
+      assertThat(changes.getRemoved(), hasSize(0));
+    }
+
+    {
+      final List<BoundMonitor> boundMonitors = Arrays.asList(
+          // #1 MODIFIED
+          new BoundMonitor()
+              .setMonitorId(id1)
+              .setRenderedContent("{\"instance\":1, \"state\":2}"),
+          // #2 REMOVED
+          // #3 UNCHANGED
+          new BoundMonitor()
+              .setMonitorId(id3)
+              .setRenderedContent("{\"instance\":3, \"state\":1}"),
+          // #4 CREATED
+          new BoundMonitor()
+              .setMonitorId(id4)
+              .setRenderedContent("{\"instance\":4, \"state\":1}")
+      );
+
+      final BoundMonitorChanges changes = envoyRegistry
+          .applyBoundMonitors("e-1", boundMonitors);
+
+      assertThat(changes, notNullValue());
+      assertThat(changes.getCreated(), hasSize(1));
+      assertThat(changes.getCreated(), hasItem(hasProperty("monitorId", equalTo(id4))));
+      assertThat(changes.getModified(), hasSize(1));
+      assertThat(changes.getModified(), hasItem(hasProperty("monitorId", equalTo(id1))));
+      assertThat(changes.getRemoved(), hasSize(1));
+      assertThat(changes.getRemoved(), hasItem(id2));
+    }
+
+
   }
 }
