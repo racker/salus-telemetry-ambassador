@@ -26,6 +26,6 @@ import lombok.Data;
 @Data
 public class BoundMonitorChanges {
   List<BoundMonitor> created = new ArrayList<>();
-  List<BoundMonitor> modified = new ArrayList<>();
-  Set<UUID> removed;
+  List<BoundMonitor> updated = new ArrayList<>();
+  Set<UUID> deleted;
 }

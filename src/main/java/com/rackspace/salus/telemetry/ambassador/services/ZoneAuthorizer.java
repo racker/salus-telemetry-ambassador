@@ -19,13 +19,16 @@ package com.rackspace.salus.telemetry.ambassador.services;
 import com.rackspace.salus.telemetry.ambassador.config.AmbassadorProperties;
 import com.rackspace.salus.telemetry.ambassador.types.ZoneNotAuthorizedException;
 import com.rackspace.salus.telemetry.etcd.types.ResolvedZone;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 
 /**
  * Handles validation and authorization of public zones.
  */
 @Component
+@Slf4j
 public class ZoneAuthorizer {
 
   private final AmbassadorProperties properties;
@@ -44,6 +47,15 @@ public class ZoneAuthorizer {
    * @throws ZoneNotAuthorizedException when the given zone is public and the tenant is not authorized
    */
   public ResolvedZone authorize(String tenantId, String zone) throws ZoneNotAuthorizedException {
+    if (!StringUtils.hasText(zone)) {
+      return null;
+    }
+
+    log.debug(
+        "Evaluating zone={} attached by tenant={} against publicZonePrefix={}",
+        zone, tenantId, properties.getPublicZonePrefix()
+    );
+
     if (zone.startsWith(properties.getPublicZonePrefix())) {
       if (properties.getPublicZoneTenants() == null || !properties.getPublicZoneTenants()
           .contains(tenantId)) {

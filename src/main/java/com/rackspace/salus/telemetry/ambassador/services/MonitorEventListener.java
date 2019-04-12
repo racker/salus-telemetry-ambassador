@@ -19,17 +19,14 @@ package com.rackspace.salus.telemetry.ambassador.services;
 import com.rackspace.salus.common.messaging.KafkaTopicProperties;
 import com.rackspace.salus.monitor_management.entities.BoundMonitor;
 import com.rackspace.salus.monitor_management.web.client.MonitorApi;
-import com.rackspace.salus.services.TelemetryEdge;
-import com.rackspace.salus.services.TelemetryEdge.ConfigurationOp.Type;
-import com.rackspace.salus.telemetry.ambassador.types.BoundMonitorChanges;
+import com.rackspace.salus.services.TelemetryEdge.EnvoyInstruction;
 import com.rackspace.salus.telemetry.messaging.MonitorBoundEvent;
-import com.rackspace.salus.telemetry.messaging.MonitorEvent;
 import com.rackspace.salus.telemetry.messaging.OperationType;
-import com.rackspace.salus.telemetry.model.AgentConfig;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.common.TopicPartition;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -63,34 +60,6 @@ public class MonitorEventListener implements ConsumerSeekAware {
   }
 
   @KafkaListener(topics = "#{__listener.topic}", groupId = "#{__listener.groupId}")
-  public void handleMessage(MonitorEvent event) {
-    if (!envoyRegistry.contains(event.getEnvoyId())) {
-      log.trace("Discarded monitorEvent={} for unregistered Envoy", event);
-      return;
-    }
-
-    log.debug("Handling monitorEvent={}", event);
-
-    final AgentConfig agentConfig = event.getConfig();
-
-    final TelemetryEdge.EnvoyInstruction instruction = TelemetryEdge.EnvoyInstruction.newBuilder()
-        .setConfigure(
-            TelemetryEdge.EnvoyInstructionConfigure.newBuilder()
-                .setAgentType(TelemetryEdge.AgentType.valueOf(agentConfig.getAgentType().name()))
-                .addOperations(
-                    TelemetryEdge.ConfigurationOp.newBuilder()
-                        .setType(convertOpType(event.getOperationType()))
-                        .setId(event.getMonitorId())
-                        .setContent(agentConfig.getContent())
-                )
-        )
-        .build();
-
-    envoyRegistry.sendInstruction(event.getEnvoyId(), instruction);
-
-  }
-
-  @KafkaListener(topics = "#{__listener.topic}", groupId = "#{__listener.groupId}")
   public void handleMessage(MonitorBoundEvent event) {
     final String envoyId = event.getEnvoyId();
 
@@ -103,19 +72,31 @@ public class MonitorEventListener implements ConsumerSeekAware {
 
     final List<BoundMonitor> boundMonitors = monitorApi.getBoundMonitors(envoyId);
 
-    final BoundMonitorChanges changes = envoyRegistry.applyBoundMonitors(envoyId, boundMonitors);
-  }
+    // reconcile all bound monitors for this envoy and determine what operation types to send
 
-  private Type convertOpType(OperationType operationType) {
-    switch (operationType) {
-      case CREATE:
-        return Type.CREATE;
-      case UPDATE:
-        return Type.MODIFY;
-      case DELETE:
-        return Type.REMOVE;
-      default:
-        throw new IllegalArgumentException("Unknown operationType: " + operationType);
+    final Map<OperationType, List<BoundMonitor>> changes = envoyRegistry.applyBoundMonitors(envoyId, boundMonitors);
+    log.debug("Applied boundMonitors and computed changes={}", changes);
+
+    // transform bound monitor changes into instructions
+
+    final ConfigInstructionsBuilder instructionsBuilder = new ConfigInstructionsBuilder();
+    for (Entry<OperationType, List<BoundMonitor>> entry : changes.entrySet()) {
+      for (BoundMonitor boundMonitor : entry.getValue()) {
+        instructionsBuilder.add(
+            boundMonitor.getAgentType(),
+            boundMonitor.getRenderedContent(),
+            entry.getKey(),
+            boundMonitor.getMonitorId().toString()
+        );
+      }
+    }
+
+    final List<EnvoyInstruction> instructions = instructionsBuilder.build();
+
+    // ...and send them down to the envoy
+
+    for (EnvoyInstruction instruction : instructions) {
+      envoyRegistry.sendInstruction(envoyId, instruction);
     }
   }
 

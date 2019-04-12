@@ -18,6 +18,7 @@ package com.rackspace.salus.telemetry.ambassador.services;
 
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.notNullValue;
+import static org.hamcrest.Matchers.nullValue;
 import static org.junit.Assert.assertThat;
 
 import com.rackspace.salus.telemetry.ambassador.config.AmbassadorProperties;
@@ -79,5 +80,25 @@ public class ZoneAuthorizerTest {
     assertThat(zone, notNullValue());
     assertThat(zone.getId(), equalTo("public/us-east"));
     assertThat(zone.isPublicZone(), equalTo(true));
+  }
+
+  @Test
+  public void testResolvingNullZone() throws ZoneNotAuthorizedException {
+    AmbassadorProperties properties = new AmbassadorProperties();
+    final ZoneAuthorizer authorizer = new ZoneAuthorizer(properties);
+
+    final ResolvedZone zone = authorizer.authorize("any-tenant", null);
+
+    assertThat(zone, nullValue());
+  }
+
+  @Test
+  public void testResolvingEmptyZone() throws ZoneNotAuthorizedException {
+    AmbassadorProperties properties = new AmbassadorProperties();
+    final ZoneAuthorizer authorizer = new ZoneAuthorizer(properties);
+
+    final ResolvedZone zone = authorizer.authorize("any-tenant", "");
+
+    assertThat(zone, nullValue());
   }
 }

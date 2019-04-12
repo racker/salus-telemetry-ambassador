@@ -30,7 +30,6 @@ import com.rackspace.salus.services.TelemetryEdge;
 import com.rackspace.salus.services.TelemetryEdge.EnvoyInstruction;
 import com.rackspace.salus.services.TelemetryEdge.EnvoySummary;
 import com.rackspace.salus.telemetry.ambassador.config.AmbassadorProperties;
-import com.rackspace.salus.telemetry.ambassador.types.BoundMonitorChanges;
 import com.rackspace.salus.telemetry.ambassador.types.ZoneNotAuthorizedException;
 import com.rackspace.salus.telemetry.etcd.services.EnvoyLabelManagement;
 import com.rackspace.salus.telemetry.etcd.services.EnvoyLeaseTracking;
@@ -38,6 +37,8 @@ import com.rackspace.salus.telemetry.etcd.services.EnvoyResourceManagement;
 import com.rackspace.salus.telemetry.etcd.services.ZoneStorage;
 import com.rackspace.salus.telemetry.etcd.types.ResolvedZone;
 import com.rackspace.salus.telemetry.messaging.AttachEvent;
+import com.rackspace.salus.telemetry.messaging.OperationType;
+import com.rackspace.salus.telemetry.model.AgentType;
 import com.rackspace.salus.telemetry.model.LabelNamespaces;
 import io.grpc.Status;
 import io.grpc.StatusException;
@@ -48,6 +49,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -56,6 +58,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import lombok.Data;
@@ -93,7 +96,13 @@ public class EnvoyRegistry {
       /**
        * Maps monitorId to a hash of its the bound monitor's rendered content
        */
-      Map<UUID, HashCode> boundMonitors = new HashMap<>();
+      Map<UUID, BoundMonitorEntry> boundMonitors = new HashMap<>();
+    }
+
+    @Data
+    static class BoundMonitorEntry {
+      final HashCode hashCode;
+      final AgentType agentType;
     }
 
     private ConcurrentHashMap<String, EnvoyEntry> envoys = new ConcurrentHashMap<>();
@@ -189,12 +198,7 @@ public class EnvoyRegistry {
                 envoys.put(envoyId, new EnvoyEntry(instructionStreamObserver, envoyLabels, resourceId));
                 return leaseId;
             })
-            .thenCompose(leaseId ->
-                zoneStorage.registerEnvoyInZone(zone, envoyId, leaseId)
-                    .thenApply(result -> {
-                      log.debug("Registered envoyId={} in zone={}", envoyId, zone);
-                      return leaseId;
-                    }))
+            .thenCompose(leaseId -> registerInZone(envoyId, resourceId, zone, leaseId))
             .thenCompose(leaseId ->
                 postAttachEvent(tenantId, envoyId, envoySummary, envoyLabels, remoteAddr)
                 .thenApply(sendResult -> {
@@ -224,7 +228,21 @@ public class EnvoyRegistry {
 
     }
 
-    private Map<String, String> processEnvoyLabels(EnvoySummary envoySummary) {
+  private CompletionStage<Long> registerInZone(String envoyId, String resourceId,
+                                               ResolvedZone zone, Long leaseId) {
+    if (zone != null) {
+      return zoneStorage.registerEnvoyInZone(zone, envoyId, resourceId, leaseId)
+          .thenApply(result -> {
+            log.debug("Registered envoyId={} in zone={}", envoyId, zone);
+            return leaseId;
+          });
+    }
+    else {
+      return CompletableFuture.completedFuture(leaseId);
+    }
+  }
+
+  private Map<String, String> processEnvoyLabels(EnvoySummary envoySummary) {
 
         // apply a namespace to the label names
         return envoySummary.getLabelsMap().entrySet().stream()
@@ -345,16 +363,16 @@ public class EnvoyRegistry {
     }
 
     @SuppressWarnings("UnstableApiUsage")
-    public BoundMonitorChanges applyBoundMonitors(String envoyId, List<BoundMonitor> boundMonitors) {
+    public Map<OperationType, List<BoundMonitor>> applyBoundMonitors(String envoyId, List<BoundMonitor> boundMonitors) {
       final EnvoyEntry entry = envoys.get(envoyId);
       if (entry == null) {
         return null;
       }
 
-      final BoundMonitorChanges changes = new BoundMonitorChanges();
+      final HashMap<OperationType, List<BoundMonitor>> changes = new HashMap<>();
 
       synchronized (entry.getBoundMonitors()) {
-        final Map<UUID, HashCode> bindings = entry.getBoundMonitors();
+        final Map<UUID, BoundMonitorEntry> bindings = entry.getBoundMonitors();
         // This will be used to track monitors that got removed by starting with all, but
         // incrementally removing from this set as they're seen in the incoming bound monitors
         final Set<UUID> staleMonitorIds = new HashSet<>(bindings.keySet());
@@ -364,35 +382,56 @@ public class EnvoyRegistry {
           final UUID monitorId = boundMonitor.getMonitorId();
           staleMonitorIds.remove(monitorId);
 
-          final HashCode prevHashCode = bindings.get(monitorId);
+          final BoundMonitorEntry prevEntry = bindings.get(monitorId);
 
-          if (prevHashCode == null) {
+          if (prevEntry == null) {
             // CREATED
-            changes.getCreated().add(boundMonitor);
-            bindings.put(monitorId, hashRenderedContent(boundMonitor));
-          }
-          else {
+            getOrCreate(changes, OperationType.CREATE).add(boundMonitor);
+            bindings.put(
+                monitorId,
+                new BoundMonitorEntry(
+                    hashRenderedContent(boundMonitor), boundMonitor.getAgentType()
+                )
+            );
+          } else {
             // Possibly modified
 
             final HashCode newHashCode = hashRenderedContent(boundMonitor);
 
-            if (!newHashCode.equals(prevHashCode)) {
-              // MODIFIED
-              changes.getModified().add(boundMonitor);
-              bindings.put(monitorId, newHashCode);
+            if (!newHashCode.equals(prevEntry.getHashCode())) {
+              // UPDATED
+              getOrCreate(changes, OperationType.UPDATE).add(boundMonitor);
+              bindings.put(
+                  monitorId,
+                  new BoundMonitorEntry(
+                      hashRenderedContent(boundMonitor), boundMonitor.getAgentType()
+                  )
+              );
             }
           }
         }
 
-        // And removed ones are all those left over
-        changes.setRemoved(staleMonitorIds);
-        // Changes to a map's keySet will apply to the backing map, so use this operation
-        // to remove all the monitors that were not included in incoming set
-        bindings.keySet().removeAll(staleMonitorIds);
-      }
+        // DELETE ones left over
+        for (UUID staleMonitorId : staleMonitorIds) {
+          final BoundMonitorEntry removed = bindings.remove(staleMonitorId);
+          getOrCreate(changes, OperationType.DELETE).add(
+              // fabricate a bound monitor just so we can convey the minimal attributes
+              new BoundMonitor()
+              .setAgentType(removed.agentType)
+              .setMonitorId(staleMonitorId)
+              .setRenderedContent("")
+          );
+
+        }
+
+      } // end of synchronized block
 
       return changes;
     }
+
+  private static <K,V> List<V> getOrCreate(HashMap<K, List<V>> map, K key) {
+    return map.computeIfAbsent(key, operationType -> new ArrayList<>());
+  }
 
   @SuppressWarnings("UnstableApiUsage")
   private HashCode hashRenderedContent(BoundMonitor boundMonitor) {
