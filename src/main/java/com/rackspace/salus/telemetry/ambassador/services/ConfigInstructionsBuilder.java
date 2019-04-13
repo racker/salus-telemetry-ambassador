@@ -29,8 +29,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * This builder helps to organize a list of raw agent config operations, such as those from
- * {@link com.rackspace.salus.telemetry.ambassador.types.BoundMonitorChanges} and groups them
+ * This builder helps to organize a list of raw agent config operations and groups them
  * up into {@link EnvoyInstruction}s, one per agent type.
  */
 public class ConfigInstructionsBuilder {

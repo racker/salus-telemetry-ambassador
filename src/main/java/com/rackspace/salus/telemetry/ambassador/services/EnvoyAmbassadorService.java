@@ -34,7 +34,6 @@ import org.springframework.core.task.TaskExecutor;
 @Slf4j
 public class EnvoyAmbassadorService extends TelemetryAmbassadorGrpc.TelemetryAmbassadorImplBase {
     private final EnvoyRegistry envoyRegistry;
-    private final ZoneAuthorizer zoneAuthorizer;
     private final LogEventRouter logEventRouter;
     private final MetricRouter metricRouter;
     private final TaskExecutor taskExecutor;
@@ -49,13 +48,11 @@ public class EnvoyAmbassadorService extends TelemetryAmbassadorGrpc.TelemetryAmb
 
     @Autowired
     public EnvoyAmbassadorService(EnvoyRegistry envoyRegistry,
-                                  ZoneAuthorizer zoneAuthorizer,
                                   LogEventRouter logEventRouter,
                                   MetricRouter metricRouter,
                                   TaskExecutor taskExecutor,
                                   MeterRegistry meterRegistry) {
         this.envoyRegistry = envoyRegistry;
-        this.zoneAuthorizer = zoneAuthorizer;
         this.logEventRouter = logEventRouter;
         this.metricRouter = metricRouter;
         this.taskExecutor = taskExecutor;
