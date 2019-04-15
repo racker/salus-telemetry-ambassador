@@ -88,4 +88,40 @@ public class MetricRouterTest {
 
         verifyNoMoreInteractions(kafkaEgress, envoyRegistry);
     }
+
+    @Test
+    public void testRouteMetric_withTargetTenant() {
+
+        Map<String, String> envoyLabels = new HashMap<>();
+        envoyLabels.put("hostname", "host1");
+        envoyLabels.put("os", "linux");
+
+        when(envoyRegistry.getEnvoyLabels(any()))
+            .thenReturn(envoyLabels);
+
+        when(envoyRegistry.getResourceId(any()))
+            .thenReturn("resourceId");
+
+        final TelemetryEdge.PostedMetric postedMetric = TelemetryEdge.PostedMetric.newBuilder()
+            .setMetric(TelemetryEdge.Metric.newBuilder()
+                .setNameTagValue(TelemetryEdge.NameTagValueMetric.newBuilder()
+                    .setTimestamp(1539030613123L)
+                    .setName("cpu")
+                    .putTags("cpu", "cpu1")
+                    .putTags(ConfigInstructionsBuilder.TARGET_TENANT, "t-some-other")
+                    .putFvalues("usage", 1.45)
+                    .putSvalues("status", "enabled")
+                    .build())
+            )
+            .build();
+
+        metricRouter.route("t1", "envoy-1", postedMetric);
+
+        verify(envoyRegistry).getEnvoyLabels("envoy-1");
+        verify(envoyRegistry).getResourceId("envoy-1");
+        verify(kafkaEgress).send("t-some-other", KafkaMessageType.METRIC,
+            "{\"timestamp\":\"2018-10-08T20:30:13.123Z\",\"accountType\":\"RCN\",\"account\":\"t-some-other\",\"device\":\"resourceId\",\"deviceLabel\":\"\",\"deviceMetadata\":{\"hostname\":\"host1\",\"os\":\"linux\"},\"monitoringSystem\":\"SALUS\",\"systemMetadata\":{\"envoyId\":\"envoy-1\"},\"collectionName\":\"cpu\",\"collectionLabel\":\"\",\"collectionTarget\":\"\",\"collectionMetadata\":{\"cpu\":\"cpu1\"},\"ivalues\":{},\"fvalues\":{\"usage\":1.45},\"svalues\":{\"status\":\"enabled\"},\"units\":{}}");
+
+        verifyNoMoreInteractions(kafkaEgress, envoyRegistry);
+    }
 }

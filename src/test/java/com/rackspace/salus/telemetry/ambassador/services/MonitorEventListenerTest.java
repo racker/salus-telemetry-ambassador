@@ -78,10 +78,12 @@ public class MonitorEventListenerTest {
         new BoundMonitor()
         .setMonitorId(id1)
         .setAgentType(AgentType.TELEGRAF)
+        .setTargetTenant("t-1")
         .setRenderedContent("content1"),
         new BoundMonitor()
         .setMonitorId(id2)
         .setAgentType(AgentType.FILEBEAT)
+        .setTargetTenant("t-2")
         .setRenderedContent("content2")
     );
 

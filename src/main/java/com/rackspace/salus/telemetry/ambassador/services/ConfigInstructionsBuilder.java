@@ -16,7 +16,9 @@
 
 package com.rackspace.salus.telemetry.ambassador.services;
 
+import com.rackspace.salus.monitor_management.entities.BoundMonitor;
 import com.rackspace.salus.services.TelemetryEdge;
+import com.rackspace.salus.services.TelemetryEdge.ConfigurationOp;
 import com.rackspace.salus.services.TelemetryEdge.ConfigurationOp.Type;
 import com.rackspace.salus.services.TelemetryEdge.EnvoyInstruction;
 import com.rackspace.salus.services.TelemetryEdge.EnvoyInstructionConfigure;
@@ -27,12 +29,15 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.stream.Collectors;
+import org.springframework.util.StringUtils;
 
 /**
  * This builder helps to organize a list of raw agent config operations and groups them
  * up into {@link EnvoyInstruction}s, one per agent type.
  */
 public class ConfigInstructionsBuilder {
+
+  public static final String TARGET_TENANT = "target_tenant";
 
   private HashMap<AgentType, EnvoyInstructionConfigure.Builder> buildersByAgentType = new LinkedHashMap<>();
 
@@ -45,41 +50,26 @@ public class ConfigInstructionsBuilder {
         .collect(Collectors.toList());
   }
 
-  public ConfigInstructionsBuilder add(AgentType agentType,
-                                       String agentConfigContent,
-                                       OperationType operationType,
-                                       String monitorId) {
+  public ConfigInstructionsBuilder add(
+      BoundMonitor boundMonitor,
+      OperationType operationType) {
     final Builder builder = buildersByAgentType.computeIfAbsent(
-        agentType,
+        boundMonitor.getAgentType(),
         givenAgentType ->
             EnvoyInstructionConfigure.newBuilder()
                 .setAgentType(TelemetryEdge.AgentType.valueOf(givenAgentType.name()))
     );
 
-    builder.addOperationsBuilder()
-        .setId(monitorId)
+    final ConfigurationOp.Builder opBuilder = builder.addOperationsBuilder()
+        .setId(boundMonitor.getMonitorId().toString())
         .setType(convertOpType(operationType))
-        .setContent(agentConfigContent);
+        .setContent(boundMonitor.getRenderedContent());
+
+    if (StringUtils.hasText(boundMonitor.getTargetTenant())) {
+      opBuilder.putExtraLabels(TARGET_TENANT, boundMonitor.getTargetTenant());
+    }
 
     return this;
-  }
-
-  private EnvoyInstruction buildConfigInstruction(AgentType agentType,
-                                                  String agentConfigContent,
-                                                  OperationType operationType,
-                                                  String monitorId) {
-    return EnvoyInstruction.newBuilder()
-        .setConfigure(
-            TelemetryEdge.EnvoyInstructionConfigure.newBuilder()
-                .setAgentType(TelemetryEdge.AgentType.valueOf(agentType.name()))
-                .addOperations(
-                    TelemetryEdge.ConfigurationOp.newBuilder()
-                        .setType(convertOpType(operationType))
-                        .setId(monitorId)
-                        .setContent(agentConfigContent)
-                )
-        )
-        .build();
   }
 
 

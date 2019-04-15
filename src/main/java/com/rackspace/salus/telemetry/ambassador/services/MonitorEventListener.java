@@ -83,10 +83,8 @@ public class MonitorEventListener implements ConsumerSeekAware {
     for (Entry<OperationType, List<BoundMonitor>> entry : changes.entrySet()) {
       for (BoundMonitor boundMonitor : entry.getValue()) {
         instructionsBuilder.add(
-            boundMonitor.getAgentType(),
-            boundMonitor.getRenderedContent(),
-            entry.getKey(),
-            boundMonitor.getMonitorId().toString()
+            boundMonitor,
+            entry.getKey()
         );
       }
     }
