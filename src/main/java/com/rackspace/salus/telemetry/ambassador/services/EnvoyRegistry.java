@@ -94,15 +94,32 @@ public class EnvoyRegistry {
         final String resourceId;
 
       /**
-       * Maps monitorId to a hash of its the bound monitor's rendered content
+       * Maps {@link BoundMonitorUtils#buildConfiguredMonitorId(BoundMonitor)}
+       * to a hash of its the bound monitor's rendered content
        */
-      Map<UUID, BoundMonitorEntry> boundMonitors = new HashMap<>();
+      Map<String, BoundMonitorEntry> boundMonitors = new HashMap<>();
     }
 
     @Data
     static class BoundMonitorEntry {
+
+      /**
+       * Hash of the rendered bound monitor content. Used to detect updates to existing
+       * monitor.
+       */
       final HashCode hashCode;
+      /**
+       * agentType is needed to handle deletion of entries.
+       */
       final AgentType agentType;
+      /**
+       * monitorId is needed to handle deletion of entries.
+       */
+      final UUID monitorId;
+      /**
+       * resourceId is needed to handle deletion of entries.
+       */
+      final String resourceId;
     }
 
     private ConcurrentHashMap<String, EnvoyEntry> envoys = new ConcurrentHashMap<>();
@@ -362,6 +379,15 @@ public class EnvoyRegistry {
       envoys.put(envoyId, new EnvoyEntry(null, null, null));
     }
 
+    /**
+     * Reconciles the given bound monitors for the envoy against the existing entry for that
+     * envoy.
+     * @param envoyId the envoy to reconcile
+     * @param boundMonitors the latest set of bound monitors provided by the monitor manager for
+     * this envoy
+     * @return a mapping of detected changes organized by change/operation type. For deletions,
+     * a BoundMonitor is fabricated to convey the details of the deleted monitor.
+     */
     @SuppressWarnings("UnstableApiUsage")
     public Map<OperationType, List<BoundMonitor>> applyBoundMonitors(String envoyId, List<BoundMonitor> boundMonitors) {
       final EnvoyEntry entry = envoys.get(envoyId);
@@ -372,14 +398,14 @@ public class EnvoyRegistry {
       final HashMap<OperationType, List<BoundMonitor>> changes = new HashMap<>();
 
       synchronized (entry.getBoundMonitors()) {
-        final Map<UUID, BoundMonitorEntry> bindings = entry.getBoundMonitors();
+        final Map<String, BoundMonitorEntry> bindings = entry.getBoundMonitors();
         // This will be used to track monitors that got removed by starting with all, but
         // incrementally removing from this set as they're seen in the incoming bound monitors
-        final Set<UUID> staleMonitorIds = new HashSet<>(bindings.keySet());
+        final Set<String> staleMonitorIds = new HashSet<>(bindings.keySet());
 
         for (BoundMonitor boundMonitor : boundMonitors) {
 
-          final UUID monitorId = boundMonitor.getMonitorId();
+          final String monitorId = BoundMonitorUtils.buildConfiguredMonitorId(boundMonitor);
           staleMonitorIds.remove(monitorId);
 
           final BoundMonitorEntry prevEntry = bindings.get(monitorId);
@@ -390,7 +416,8 @@ public class EnvoyRegistry {
             bindings.put(
                 monitorId,
                 new BoundMonitorEntry(
-                    hashRenderedContent(boundMonitor), boundMonitor.getAgentType()
+                    hashRenderedContent(boundMonitor), boundMonitor.getAgentType(),
+                    boundMonitor.getMonitorId(), boundMonitor.getResourceId()
                 )
             );
           } else {
@@ -404,7 +431,8 @@ public class EnvoyRegistry {
               bindings.put(
                   monitorId,
                   new BoundMonitorEntry(
-                      hashRenderedContent(boundMonitor), boundMonitor.getAgentType()
+                      hashRenderedContent(boundMonitor), boundMonitor.getAgentType(),
+                      boundMonitor.getMonitorId(), boundMonitor.getResourceId()
                   )
               );
             }
@@ -412,13 +440,14 @@ public class EnvoyRegistry {
         }
 
         // DELETE ones left over
-        for (UUID staleMonitorId : staleMonitorIds) {
+        for (String staleMonitorId : staleMonitorIds) {
           final BoundMonitorEntry removed = bindings.remove(staleMonitorId);
           getOrCreate(changes, OperationType.DELETE).add(
               // fabricate a bound monitor just so we can convey the minimal attributes
               new BoundMonitor()
               .setAgentType(removed.agentType)
-              .setMonitorId(staleMonitorId)
+              .setMonitorId(removed.monitorId)
+              .setResourceId(removed.resourceId)
               .setRenderedContent("")
           );
 

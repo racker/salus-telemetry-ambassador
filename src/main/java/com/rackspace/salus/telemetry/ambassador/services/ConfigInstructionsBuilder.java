@@ -37,8 +37,6 @@ import org.springframework.util.StringUtils;
  */
 public class ConfigInstructionsBuilder {
 
-  public static final String TARGET_TENANT = "target_tenant";
-
   private HashMap<AgentType, EnvoyInstructionConfigure.Builder> buildersByAgentType = new LinkedHashMap<>();
 
   public List<EnvoyInstruction> build() {
@@ -61,15 +59,22 @@ public class ConfigInstructionsBuilder {
     );
 
     final ConfigurationOp.Builder opBuilder = builder.addOperationsBuilder()
-        .setId(boundMonitor.getMonitorId().toString())
+        .setId(BoundMonitorUtils.buildConfiguredMonitorId(boundMonitor))
         .setType(convertOpType(operationType))
         .setContent(boundMonitor.getRenderedContent());
 
     if (StringUtils.hasText(boundMonitor.getTargetTenant())) {
-      opBuilder.putExtraLabels(TARGET_TENANT, boundMonitor.getTargetTenant());
+      opBuilder.putExtraLabels(BoundMonitorUtils.LABEL_TARGET_TENANT, boundMonitor.getTargetTenant());
+    }
+    if (isRemoteMonitor(boundMonitor)) {
+      opBuilder.putExtraLabels(BoundMonitorUtils.LABEL_RESOURCE, boundMonitor.getResourceId());
     }
 
     return this;
+  }
+
+  private boolean isRemoteMonitor(BoundMonitor boundMonitor) {
+    return StringUtils.hasText(boundMonitor.getZone());
   }
 
 

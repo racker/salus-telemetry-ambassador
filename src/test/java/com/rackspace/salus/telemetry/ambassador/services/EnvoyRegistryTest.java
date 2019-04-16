@@ -27,6 +27,7 @@ import com.rackspace.salus.telemetry.etcd.services.ZoneStorage;
 import com.rackspace.salus.telemetry.etcd.types.ResolvedZone;
 import com.rackspace.salus.telemetry.messaging.AttachEvent;
 import com.rackspace.salus.telemetry.messaging.OperationType;
+import com.rackspace.salus.telemetry.model.AgentType;
 import com.rackspace.salus.telemetry.model.ResourceInfo;
 import io.grpc.StatusException;
 import io.grpc.stub.StreamObserver;
@@ -235,9 +236,21 @@ public class EnvoyRegistryTest {
               .setRenderedContent("{\"instance\":1, \"state\":1}"),
           new BoundMonitor()
               .setMonitorId(id2)
+              .setResourceId("r-2")
+              .setAgentType(AgentType.TELEGRAF)
               .setRenderedContent("{\"instance\":2, \"state\":1}"),
           new BoundMonitor()
               .setMonitorId(id3)
+              .setTargetTenant("t-1")
+              .setZone("z-1")
+              .setResourceId("r-3")
+              .setRenderedContent("{\"instance\":3, \"state\":1}"),
+          // monitor binding for another resource for the same tenant
+          new BoundMonitor()
+              .setMonitorId(id3)
+              .setTargetTenant("t-1")
+              .setZone("z-1")
+              .setResourceId("r-4")
               .setRenderedContent("{\"instance\":3, \"state\":1}")
       );
 
@@ -245,21 +258,32 @@ public class EnvoyRegistryTest {
           .applyBoundMonitors("e-1", boundMonitors);
 
       assertThat(changes, notNullValue());
-      assertThat(changes.get(OperationType.CREATE), hasSize(3));
+      assertThat(changes.get(OperationType.CREATE), hasSize(4));
       assertThat(changes.get(OperationType.UPDATE), nullValue());
       assertThat(changes.get(OperationType.DELETE), nullValue());
     }
 
     {
+      // Exercise some changes
       final List<BoundMonitor> boundMonitors = Arrays.asList(
           // #1 MODIFIED
           new BoundMonitor()
               .setMonitorId(id1)
               .setRenderedContent("{\"instance\":1, \"state\":2}"),
           // #2 REMOVED
-          // #3 UNCHANGED
+          // #3 UNCHANGED for both resources
           new BoundMonitor()
               .setMonitorId(id3)
+              .setTargetTenant("t-1")
+              .setZone("z-1")
+              .setResourceId("r-3")
+              .setRenderedContent("{\"instance\":3, \"state\":1}"),
+          // monitor binding for another resource for the same tenant
+          new BoundMonitor()
+              .setMonitorId(id3)
+              .setTargetTenant("t-1")
+              .setZone("z-1")
+              .setResourceId("r-4")
               .setRenderedContent("{\"instance\":3, \"state\":1}"),
           // #4 CREATED
           new BoundMonitor()
@@ -276,7 +300,10 @@ public class EnvoyRegistryTest {
       assertThat(changes.get(OperationType.UPDATE), hasSize(1));
       assertThat(changes.get(OperationType.UPDATE), hasItem(hasProperty("monitorId", equalTo(id1))));
       assertThat(changes.get(OperationType.DELETE), hasSize(1));
-      assertThat(changes.get(OperationType.DELETE), hasItem(hasProperty("monitorId", equalTo(id2))));
+      final List<BoundMonitor> deleted = changes.get(OperationType.DELETE);
+      assertThat(deleted.get(0).getAgentType(), equalTo(AgentType.TELEGRAF));
+      assertThat(deleted.get(0).getMonitorId(), equalTo(id2));
+      assertThat(deleted.get(0).getResourceId(), equalTo("r-2"));
     }
 
 

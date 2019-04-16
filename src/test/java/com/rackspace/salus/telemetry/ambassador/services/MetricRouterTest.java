@@ -100,7 +100,7 @@ public class MetricRouterTest {
             .thenReturn(envoyLabels);
 
         when(envoyRegistry.getResourceId(any()))
-            .thenReturn("resourceId");
+            .thenReturn("r-of-envoy");
 
         final TelemetryEdge.PostedMetric postedMetric = TelemetryEdge.PostedMetric.newBuilder()
             .setMetric(TelemetryEdge.Metric.newBuilder()
@@ -108,7 +108,8 @@ public class MetricRouterTest {
                     .setTimestamp(1539030613123L)
                     .setName("cpu")
                     .putTags("cpu", "cpu1")
-                    .putTags(ConfigInstructionsBuilder.TARGET_TENANT, "t-some-other")
+                    .putTags(BoundMonitorUtils.LABEL_TARGET_TENANT, "t-some-other")
+                    .putTags(BoundMonitorUtils.LABEL_RESOURCE, "r-other")
                     .putFvalues("usage", 1.45)
                     .putSvalues("status", "enabled")
                     .build())
@@ -118,9 +119,8 @@ public class MetricRouterTest {
         metricRouter.route("t1", "envoy-1", postedMetric);
 
         verify(envoyRegistry).getEnvoyLabels("envoy-1");
-        verify(envoyRegistry).getResourceId("envoy-1");
         verify(kafkaEgress).send("t-some-other", KafkaMessageType.METRIC,
-            "{\"timestamp\":\"2018-10-08T20:30:13.123Z\",\"accountType\":\"RCN\",\"account\":\"t-some-other\",\"device\":\"resourceId\",\"deviceLabel\":\"\",\"deviceMetadata\":{\"hostname\":\"host1\",\"os\":\"linux\"},\"monitoringSystem\":\"SALUS\",\"systemMetadata\":{\"envoyId\":\"envoy-1\"},\"collectionName\":\"cpu\",\"collectionLabel\":\"\",\"collectionTarget\":\"\",\"collectionMetadata\":{\"cpu\":\"cpu1\"},\"ivalues\":{},\"fvalues\":{\"usage\":1.45},\"svalues\":{\"status\":\"enabled\"},\"units\":{}}");
+            "{\"timestamp\":\"2018-10-08T20:30:13.123Z\",\"accountType\":\"RCN\",\"account\":\"t-some-other\",\"device\":\"r-other\",\"deviceLabel\":\"\",\"deviceMetadata\":{\"hostname\":\"host1\",\"os\":\"linux\"},\"monitoringSystem\":\"SALUS\",\"systemMetadata\":{\"envoyId\":\"envoy-1\"},\"collectionName\":\"cpu\",\"collectionLabel\":\"\",\"collectionTarget\":\"\",\"collectionMetadata\":{\"cpu\":\"cpu1\"},\"ivalues\":{},\"fvalues\":{\"usage\":1.45},\"svalues\":{\"status\":\"enabled\"},\"units\":{}}");
 
         verifyNoMoreInteractions(kafkaEgress, envoyRegistry);
     }

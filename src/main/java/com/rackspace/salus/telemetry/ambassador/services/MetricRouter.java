@@ -64,8 +64,6 @@ public class MetricRouter {
             throw new IllegalArgumentException("Unable to find Envoy in the registry");
         }
 
-        final String resourceId = envoyRegistry.getResourceId(envoyId);
-
         final TelemetryEdge.NameTagValueMetric nameTagValue = postedMetric.getMetric().getNameTagValue();
         if (nameTagValue == null) {
             throw new IllegalArgumentException("Only supports metrics posted with NameTagValue variant");
@@ -74,7 +72,17 @@ public class MetricRouter {
         final Instant timestamp = Instant.ofEpochMilli(nameTagValue.getTimestamp());
 
         final Map<String, String> tagsMap = new HashMap<>(nameTagValue.getTagsMap());
-        final String taggedTargetTenant = tagsMap.remove(ConfigInstructionsBuilder.TARGET_TENANT);
+
+        // Resolve any tags injected for remote monitors where the envoy originating the
+        // measurement is not necessarily owned by the tenant of the monitor nor running on the
+        // resource of the monitor.
+
+        String resourceId = tagsMap.remove(BoundMonitorUtils.LABEL_RESOURCE);
+        if (resourceId == null) {
+            resourceId = envoyRegistry.getResourceId(envoyId);
+        }
+
+        final String taggedTargetTenant = tagsMap.remove(BoundMonitorUtils.LABEL_TARGET_TENANT);
         if (taggedTargetTenant != null) {
             tenantId = taggedTargetTenant;
         }
