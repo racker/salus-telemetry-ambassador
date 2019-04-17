@@ -25,7 +25,7 @@ import com.google.common.hash.Hashing;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.util.JsonFormat;
 import com.rackspace.salus.common.messaging.KafkaTopicProperties;
-import com.rackspace.salus.monitor_management.entities.BoundMonitor;
+import com.rackspace.salus.monitor_management.web.model.BoundMonitorDTO;
 import com.rackspace.salus.services.TelemetryEdge;
 import com.rackspace.salus.services.TelemetryEdge.EnvoyInstruction;
 import com.rackspace.salus.services.TelemetryEdge.EnvoySummary;
@@ -94,7 +94,7 @@ public class EnvoyRegistry {
         final String resourceId;
 
       /**
-       * Maps {@link BoundMonitorUtils#buildConfiguredMonitorId(BoundMonitor)}
+       * Maps {@link BoundMonitorUtils#buildConfiguredMonitorId(BoundMonitorDTO)}
        * to a hash of its the bound monitor's rendered content
        */
       Map<String, BoundMonitorEntry> boundMonitors = new HashMap<>();
@@ -386,16 +386,16 @@ public class EnvoyRegistry {
      * @param boundMonitors the latest set of bound monitors provided by the monitor manager for
      * this envoy
      * @return a mapping of detected changes organized by change/operation type. For deletions,
-     * a BoundMonitor is fabricated to convey the details of the deleted monitor.
+     * a BoundMonitorDTO is fabricated to convey the details of the deleted monitor.
      */
     @SuppressWarnings("UnstableApiUsage")
-    public Map<OperationType, List<BoundMonitor>> applyBoundMonitors(String envoyId, List<BoundMonitor> boundMonitors) {
+    public Map<OperationType, List<BoundMonitorDTO>> applyBoundMonitors(String envoyId, List<BoundMonitorDTO> boundMonitors) {
       final EnvoyEntry entry = envoys.get(envoyId);
       if (entry == null) {
         return null;
       }
 
-      final HashMap<OperationType, List<BoundMonitor>> changes = new HashMap<>();
+      final HashMap<OperationType, List<BoundMonitorDTO>> changes = new HashMap<>();
 
       synchronized (entry.getBoundMonitors()) {
         final Map<String, BoundMonitorEntry> bindings = entry.getBoundMonitors();
@@ -403,7 +403,7 @@ public class EnvoyRegistry {
         // incrementally removing from this set as they're seen in the incoming bound monitors
         final Set<String> staleMonitorIds = new HashSet<>(bindings.keySet());
 
-        for (BoundMonitor boundMonitor : boundMonitors) {
+        for (BoundMonitorDTO boundMonitor : boundMonitors) {
 
           final String monitorId = BoundMonitorUtils.buildConfiguredMonitorId(boundMonitor);
           staleMonitorIds.remove(monitorId);
@@ -444,7 +444,7 @@ public class EnvoyRegistry {
           final BoundMonitorEntry removed = bindings.remove(staleMonitorId);
           getOrCreate(changes, OperationType.DELETE).add(
               // fabricate a bound monitor just so we can convey the minimal attributes
-              new BoundMonitor()
+              new BoundMonitorDTO()
               .setAgentType(removed.agentType)
               .setMonitorId(removed.monitorId)
               .setResourceId(removed.resourceId)
@@ -463,7 +463,7 @@ public class EnvoyRegistry {
   }
 
   @SuppressWarnings("UnstableApiUsage")
-  private HashCode hashRenderedContent(BoundMonitor boundMonitor) {
+  private HashCode hashRenderedContent(BoundMonitorDTO boundMonitor) {
     return boundMonitorHashFunction.hashString(boundMonitor.getRenderedContent(),
         StandardCharsets.UTF_8
     );

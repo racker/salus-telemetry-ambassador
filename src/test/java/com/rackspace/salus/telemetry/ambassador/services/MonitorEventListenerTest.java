@@ -28,8 +28,8 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import com.rackspace.salus.common.messaging.KafkaTopicProperties;
-import com.rackspace.salus.monitor_management.entities.BoundMonitor;
 import com.rackspace.salus.monitor_management.web.client.MonitorApi;
+import com.rackspace.salus.monitor_management.web.model.BoundMonitorDTO;
 import com.rackspace.salus.services.TelemetryEdge;
 import com.rackspace.salus.services.TelemetryEdge.EnvoyInstruction;
 import com.rackspace.salus.services.TelemetryEdge.EnvoyInstructionConfigure;
@@ -74,14 +74,16 @@ public class MonitorEventListenerTest {
     final UUID id1 = UUID.randomUUID();
     final UUID id2 = UUID.randomUUID();
 
-    List<BoundMonitor> boundMonitors = Arrays.asList(
-        new BoundMonitor()
+    List<BoundMonitorDTO> boundMonitors = Arrays.asList(
+        new BoundMonitorDTO()
         .setMonitorId(id1)
+        .setResourceId("r-1")
         .setAgentType(AgentType.TELEGRAF)
         .setTargetTenant("t-1")
         .setRenderedContent("content1"),
-        new BoundMonitor()
+        new BoundMonitorDTO()
         .setMonitorId(id2)
+        .setResourceId("r-2")
         .setAgentType(AgentType.FILEBEAT)
         .setTargetTenant("t-2")
         .setRenderedContent("content2")
@@ -93,7 +95,7 @@ public class MonitorEventListenerTest {
     when(envoyRegistry.contains("e-1"))
         .thenReturn(true);
 
-    Map<OperationType, List<BoundMonitor>> changes = new HashMap<>();
+    Map<OperationType, List<BoundMonitorDTO>> changes = new HashMap<>();
     changes.put(OperationType.CREATE, boundMonitors);
 
     when(envoyRegistry.applyBoundMonitors(any(), any()))
@@ -118,14 +120,14 @@ public class MonitorEventListenerTest {
     assertThat(configure0, notNullValue());
     assertThat(configure0.getAgentType(), equalTo(TelemetryEdge.AgentType.TELEGRAF));
     assertThat(configure0.getOperationsList(), hasSize(1));
-    assertThat(configure0.getOperations(0).getId(), equalTo(id1.toString()));
+    assertThat(configure0.getOperations(0).getId(), equalTo(id1.toString()+"_r-1"));
 
     final EnvoyInstructionConfigure configure1 = envoyInstructionArg.getAllValues().get(1)
         .getConfigure();
     assertThat(configure1, notNullValue());
     assertThat(configure1.getAgentType(), equalTo(TelemetryEdge.AgentType.FILEBEAT));
     assertThat(configure1.getOperationsList(), hasSize(1));
-    assertThat(configure1.getOperations(0).getId(), equalTo(id2.toString()));
+    assertThat(configure1.getOperations(0).getId(), equalTo(id2.toString()+"_r-2"));
 
     verifyNoMoreInteractions(envoyRegistry, monitorApi);
   }
