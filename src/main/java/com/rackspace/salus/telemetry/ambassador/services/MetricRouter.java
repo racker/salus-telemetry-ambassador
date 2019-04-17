@@ -30,6 +30,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.format.DateTimeFormatter;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.avro.Schema;
@@ -63,14 +64,28 @@ public class MetricRouter {
             throw new IllegalArgumentException("Unable to find Envoy in the registry");
         }
 
-        final String resourceId = envoyRegistry.getResourceId(envoyId);
-
         final TelemetryEdge.NameTagValueMetric nameTagValue = postedMetric.getMetric().getNameTagValue();
         if (nameTagValue == null) {
             throw new IllegalArgumentException("Only supports metrics posted with NameTagValue variant");
         }
 
         final Instant timestamp = Instant.ofEpochMilli(nameTagValue.getTimestamp());
+
+        final Map<String, String> tagsMap = new HashMap<>(nameTagValue.getTagsMap());
+
+        // Resolve any tags injected for remote monitors where the envoy originating the
+        // measurement is not necessarily owned by the tenant of the monitor nor running on the
+        // resource of the monitor.
+
+        String resourceId = tagsMap.remove(BoundMonitorUtils.LABEL_RESOURCE);
+        if (resourceId == null) {
+            resourceId = envoyRegistry.getResourceId(envoyId);
+        }
+
+        final String taggedTargetTenant = tagsMap.remove(BoundMonitorUtils.LABEL_TARGET_TENANT);
+        if (taggedTargetTenant != null) {
+            tenantId = taggedTargetTenant;
+        }
 
         final ExternalMetric externalMetric = ExternalMetric.newBuilder()
             .setAccountType(AccountType.RCN)
@@ -80,7 +95,7 @@ public class MetricRouter {
             .setDeviceMetadata(envoyLabels)
             .setMonitoringSystem(MonitoringSystem.SALUS)
             .setSystemMetadata(Collections.singletonMap("envoyId", envoyId))
-            .setCollectionMetadata(nameTagValue.getTagsMap())
+            .setCollectionMetadata(tagsMap)
             .setCollectionName(nameTagValue.getName())
             .setFvalues(nameTagValue.getFvaluesMap())
             .setSvalues(nameTagValue.getSvaluesMap())

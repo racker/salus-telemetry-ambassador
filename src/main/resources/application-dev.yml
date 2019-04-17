@@ -1,6 +1,13 @@
+
 server:
   port: 8081
 logging:
   level:
     com.rackspace.salus: debug
     com.rackspace.salus.telemetry.ambassador.services.MonitorEventListener: trace
+ambassador:
+  public-zone-tenants:
+    - aaaaaa
+  public-zone-prefix: "public/"
+services:
+  monitor-management-url: http://localhost:8089
