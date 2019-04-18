@@ -17,8 +17,8 @@
 package com.rackspace.salus.telemetry.ambassador.services;
 
 import com.rackspace.salus.common.messaging.KafkaTopicProperties;
-import com.rackspace.salus.monitor_management.entities.BoundMonitor;
 import com.rackspace.salus.monitor_management.web.client.MonitorApi;
+import com.rackspace.salus.monitor_management.web.model.BoundMonitorDTO;
 import com.rackspace.salus.services.TelemetryEdge.EnvoyInstruction;
 import com.rackspace.salus.telemetry.messaging.MonitorBoundEvent;
 import com.rackspace.salus.telemetry.messaging.OperationType;
@@ -70,18 +70,18 @@ public class MonitorEventListener implements ConsumerSeekAware {
 
     log.debug("Handling monitorBoundEvent={}", event);
 
-    final List<BoundMonitor> boundMonitors = monitorApi.getBoundMonitors(envoyId);
+    final List<BoundMonitorDTO> boundMonitors = monitorApi.getBoundMonitors(envoyId);
 
     // reconcile all bound monitors for this envoy and determine what operation types to send
 
-    final Map<OperationType, List<BoundMonitor>> changes = envoyRegistry.applyBoundMonitors(envoyId, boundMonitors);
+    final Map<OperationType, List<BoundMonitorDTO>> changes = envoyRegistry.applyBoundMonitors(envoyId, boundMonitors);
     log.debug("Applied boundMonitors and computed changes={}", changes);
 
     // transform bound monitor changes into instructions
 
     final ConfigInstructionsBuilder instructionsBuilder = new ConfigInstructionsBuilder();
-    for (Entry<OperationType, List<BoundMonitor>> entry : changes.entrySet()) {
-      for (BoundMonitor boundMonitor : entry.getValue()) {
+    for (Entry<OperationType, List<BoundMonitorDTO>> entry : changes.entrySet()) {
+      for (BoundMonitorDTO boundMonitor : entry.getValue()) {
         instructionsBuilder.add(
             boundMonitor,
             entry.getKey()

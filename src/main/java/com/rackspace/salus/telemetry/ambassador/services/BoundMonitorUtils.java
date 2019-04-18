@@ -16,14 +16,14 @@
 
 package com.rackspace.salus.telemetry.ambassador.services;
 
-import com.rackspace.salus.monitor_management.entities.BoundMonitor;
+import com.rackspace.salus.monitor_management.web.model.BoundMonitorDTO;
 
 public class BoundMonitorUtils {
 
   public static final String LABEL_TARGET_TENANT = "target_tenant";
   public static final String LABEL_RESOURCE = "resource_id";
 
-  public static String buildConfiguredMonitorId(BoundMonitor boundMonitor) {
+  public static String buildConfiguredMonitorId(BoundMonitorDTO boundMonitor) {
     return String.join("_", boundMonitor.getMonitorId().toString(), boundMonitor.getResourceId());
   }
 }

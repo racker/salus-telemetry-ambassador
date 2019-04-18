@@ -13,7 +13,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.rackspace.salus.monitor_management.entities.BoundMonitor;
+import com.rackspace.salus.monitor_management.web.model.BoundMonitorDTO;
 import com.rackspace.salus.services.TelemetryEdge.EnvoyInstruction;
 import com.rackspace.salus.services.TelemetryEdge.EnvoySummary;
 import com.rackspace.salus.telemetry.ambassador.config.AmbassadorProperties;
@@ -230,23 +230,23 @@ public class EnvoyRegistryTest {
     final UUID id4 = UUID.fromString("16caf730-48e8-47ba-0004-aa9babba8953");
 
     {
-      final List<BoundMonitor> boundMonitors = Arrays.asList(
-          new BoundMonitor()
+      final List<BoundMonitorDTO> boundMonitors = Arrays.asList(
+          new BoundMonitorDTO()
               .setMonitorId(id1)
               .setRenderedContent("{\"instance\":1, \"state\":1}"),
-          new BoundMonitor()
+          new BoundMonitorDTO()
               .setMonitorId(id2)
               .setResourceId("r-2")
               .setAgentType(AgentType.TELEGRAF)
               .setRenderedContent("{\"instance\":2, \"state\":1}"),
-          new BoundMonitor()
+          new BoundMonitorDTO()
               .setMonitorId(id3)
               .setTargetTenant("t-1")
               .setZone("z-1")
               .setResourceId("r-3")
               .setRenderedContent("{\"instance\":3, \"state\":1}"),
           // monitor binding for another resource for the same tenant
-          new BoundMonitor()
+          new BoundMonitorDTO()
               .setMonitorId(id3)
               .setTargetTenant("t-1")
               .setZone("z-1")
@@ -254,7 +254,7 @@ public class EnvoyRegistryTest {
               .setRenderedContent("{\"instance\":3, \"state\":1}")
       );
 
-      final Map<OperationType, List<BoundMonitor>> changes = envoyRegistry
+      final Map<OperationType, List<BoundMonitorDTO>> changes = envoyRegistry
           .applyBoundMonitors("e-1", boundMonitors);
 
       assertThat(changes, notNullValue());
@@ -265,33 +265,33 @@ public class EnvoyRegistryTest {
 
     {
       // Exercise some changes
-      final List<BoundMonitor> boundMonitors = Arrays.asList(
+      final List<BoundMonitorDTO> boundMonitors = Arrays.asList(
           // #1 MODIFIED
-          new BoundMonitor()
+          new BoundMonitorDTO()
               .setMonitorId(id1)
               .setRenderedContent("{\"instance\":1, \"state\":2}"),
           // #2 REMOVED
           // #3 UNCHANGED for both resources
-          new BoundMonitor()
+          new BoundMonitorDTO()
               .setMonitorId(id3)
               .setTargetTenant("t-1")
               .setZone("z-1")
               .setResourceId("r-3")
               .setRenderedContent("{\"instance\":3, \"state\":1}"),
           // monitor binding for another resource for the same tenant
-          new BoundMonitor()
+          new BoundMonitorDTO()
               .setMonitorId(id3)
               .setTargetTenant("t-1")
               .setZone("z-1")
               .setResourceId("r-4")
               .setRenderedContent("{\"instance\":3, \"state\":1}"),
           // #4 CREATED
-          new BoundMonitor()
+          new BoundMonitorDTO()
               .setMonitorId(id4)
               .setRenderedContent("{\"instance\":4, \"state\":1}")
       );
 
-      final Map<OperationType, List<BoundMonitor>> changes = envoyRegistry
+      final Map<OperationType, List<BoundMonitorDTO>> changes = envoyRegistry
           .applyBoundMonitors("e-1", boundMonitors);
 
       assertThat(changes, notNullValue());
@@ -300,7 +300,7 @@ public class EnvoyRegistryTest {
       assertThat(changes.get(OperationType.UPDATE), hasSize(1));
       assertThat(changes.get(OperationType.UPDATE), hasItem(hasProperty("monitorId", equalTo(id1))));
       assertThat(changes.get(OperationType.DELETE), hasSize(1));
-      final List<BoundMonitor> deleted = changes.get(OperationType.DELETE);
+      final List<BoundMonitorDTO> deleted = changes.get(OperationType.DELETE);
       assertThat(deleted.get(0).getAgentType(), equalTo(AgentType.TELEGRAF));
       assertThat(deleted.get(0).getMonitorId(), equalTo(id2));
       assertThat(deleted.get(0).getResourceId(), equalTo("r-2"));

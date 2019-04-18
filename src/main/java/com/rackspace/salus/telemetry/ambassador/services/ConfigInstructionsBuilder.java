@@ -16,7 +16,7 @@
 
 package com.rackspace.salus.telemetry.ambassador.services;
 
-import com.rackspace.salus.monitor_management.entities.BoundMonitor;
+import com.rackspace.salus.monitor_management.web.model.BoundMonitorDTO;
 import com.rackspace.salus.services.TelemetryEdge;
 import com.rackspace.salus.services.TelemetryEdge.ConfigurationOp;
 import com.rackspace.salus.services.TelemetryEdge.ConfigurationOp.Type;
@@ -49,7 +49,7 @@ public class ConfigInstructionsBuilder {
   }
 
   public ConfigInstructionsBuilder add(
-      BoundMonitor boundMonitor,
+      BoundMonitorDTO boundMonitor,
       OperationType operationType) {
     final Builder builder = buildersByAgentType.computeIfAbsent(
         boundMonitor.getAgentType(),
@@ -73,7 +73,7 @@ public class ConfigInstructionsBuilder {
     return this;
   }
 
-  private boolean isRemoteMonitor(BoundMonitor boundMonitor) {
+  private boolean isRemoteMonitor(BoundMonitorDTO boundMonitor) {
     return StringUtils.hasText(boundMonitor.getZone());
   }
 

@@ -25,7 +25,7 @@ import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.junit.Assert.assertThat;
 
-import com.rackspace.salus.monitor_management.entities.BoundMonitor;
+import com.rackspace.salus.monitor_management.web.model.BoundMonitorDTO;
 import com.rackspace.salus.services.TelemetryEdge;
 import com.rackspace.salus.services.TelemetryEdge.ConfigurationOp.Type;
 import com.rackspace.salus.services.TelemetryEdge.EnvoyInstruction;
@@ -49,7 +49,7 @@ public class ConfigInstructionsBuilderTest {
     final UUID m5 = UUID.fromString("00000000-0000-0005-0000-000000000000");
 
     builder.add(
-        new BoundMonitor()
+        new BoundMonitorDTO()
             .setAgentType(TELEGRAF)
             .setRenderedContent("content1")
             .setMonitorId(m1)
@@ -57,7 +57,7 @@ public class ConfigInstructionsBuilderTest {
         OperationType.CREATE
     );
     builder.add(
-        new BoundMonitor()
+        new BoundMonitorDTO()
             .setAgentType(TELEGRAF)
             .setRenderedContent("content2")
             .setMonitorId(m2)
@@ -65,7 +65,7 @@ public class ConfigInstructionsBuilderTest {
         OperationType.UPDATE
     );
     builder.add(
-        new BoundMonitor()
+        new BoundMonitorDTO()
             .setAgentType(TELEGRAF)
             .setRenderedContent("")
             .setMonitorId(m3)
@@ -73,7 +73,7 @@ public class ConfigInstructionsBuilderTest {
         OperationType.DELETE
     );
     builder.add(
-        new BoundMonitor()
+        new BoundMonitorDTO()
             .setAgentType(FILEBEAT)
             .setRenderedContent("content4")
             .setMonitorId(m4)
@@ -81,7 +81,7 @@ public class ConfigInstructionsBuilderTest {
         OperationType.CREATE
     );
     builder.add(
-        new BoundMonitor()
+        new BoundMonitorDTO()
             .setAgentType(TELEGRAF)
             .setRenderedContent("content5")
             .setMonitorId(m5)
