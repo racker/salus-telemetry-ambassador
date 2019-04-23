@@ -242,14 +242,14 @@ public class EnvoyRegistryTest {
           new BoundMonitorDTO()
               .setMonitorId(id3)
               .setTargetTenant("t-1")
-              .setZone("z-1")
+              .setZoneId("z-1")
               .setResourceId("r-3")
               .setRenderedContent("{\"instance\":3, \"state\":1}"),
           // monitor binding for another resource for the same tenant
           new BoundMonitorDTO()
               .setMonitorId(id3)
               .setTargetTenant("t-1")
-              .setZone("z-1")
+              .setZoneId("z-1")
               .setResourceId("r-4")
               .setRenderedContent("{\"instance\":3, \"state\":1}")
       );
@@ -275,14 +275,14 @@ public class EnvoyRegistryTest {
           new BoundMonitorDTO()
               .setMonitorId(id3)
               .setTargetTenant("t-1")
-              .setZone("z-1")
+              .setZoneId("z-1")
               .setResourceId("r-3")
               .setRenderedContent("{\"instance\":3, \"state\":1}"),
           // monitor binding for another resource for the same tenant
           new BoundMonitorDTO()
               .setMonitorId(id3)
               .setTargetTenant("t-1")
-              .setZone("z-1")
+              .setZoneId("z-1")
               .setResourceId("r-4")
               .setRenderedContent("{\"instance\":3, \"state\":1}"),
           // #4 CREATED

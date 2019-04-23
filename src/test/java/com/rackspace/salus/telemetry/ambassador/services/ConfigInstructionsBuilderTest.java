@@ -87,7 +87,7 @@ public class ConfigInstructionsBuilderTest {
             .setMonitorId(m5)
             .setTargetTenant("t-1")
             .setResourceId("r-2")
-            .setZone("z-1"),
+            .setZoneId("z-1"),
         OperationType.CREATE
     );
 

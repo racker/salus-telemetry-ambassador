@@ -102,8 +102,7 @@ public class MonitorEventListenerTest {
         .thenReturn(changes);
 
     MonitorBoundEvent event = new MonitorBoundEvent()
-        .setEnvoyId("e-1")
-        .setOperationType(OperationType.CREATE);
+        .setEnvoyId("e-1");
 
     monitorEventListener.handleMessage(event);
 
