@@ -85,7 +85,7 @@ public class ConfigInstructionsBuilderTest {
             .setAgentType(TELEGRAF)
             .setRenderedContent("content5")
             .setMonitorId(m5)
-            .setTargetTenant("t-1")
+            .setResourceTenant("t-1")
             .setResourceId("r-2")
             .setZoneId("z-1"),
         OperationType.CREATE
