@@ -62,15 +62,10 @@ public class ZoneAuthorizer {
         throw new ZoneNotAuthorizedException(tenantId, zone);
       }
 
-      return new ResolvedZone()
-          .setPublicZone(true)
-          .setId(zone);
+      return ResolvedZone.createPublicZone(zone);
     }
     else {
-      return new ResolvedZone()
-          .setPublicZone(false)
-          .setId(zone)
-          .setTenantId(tenantId);
+      return ResolvedZone.createPrivateZone(tenantId, zone);
     }
   }
 }

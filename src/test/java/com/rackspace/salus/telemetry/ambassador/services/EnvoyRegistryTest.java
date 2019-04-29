@@ -156,9 +156,7 @@ public class EnvoyRegistryTest {
     when(envoyResourceManagement.registerResource(any(), any(), anyLong(), any(), any(), any()))
         .thenReturn(CompletableFuture.completedFuture(new ResourceInfo()));
 
-    final ResolvedZone resolvedZone = new ResolvedZone()
-        .setId("z-1")
-        .setTenantId("t-1");
+    final ResolvedZone resolvedZone = ResolvedZone.createPrivateZone("t-1", "z-1");
     when(zoneAuthorizer.authorize("t-1", "z-1"))
         .thenReturn(resolvedZone);
 
