@@ -156,9 +156,7 @@ public class EnvoyRegistryTest {
     when(envoyResourceManagement.registerResource(any(), any(), anyLong(), any(), any(), any()))
         .thenReturn(CompletableFuture.completedFuture(new ResourceInfo()));
 
-    final ResolvedZone resolvedZone = new ResolvedZone()
-        .setId("z-1")
-        .setTenantId("t-1");
+    final ResolvedZone resolvedZone = ResolvedZone.createPrivateZone("t-1", "z-1");
     when(zoneAuthorizer.authorize("t-1", "z-1"))
         .thenReturn(resolvedZone);
 
@@ -241,15 +239,15 @@ public class EnvoyRegistryTest {
               .setRenderedContent("{\"instance\":2, \"state\":1}"),
           new BoundMonitorDTO()
               .setMonitorId(id3)
-              .setTargetTenant("t-1")
-              .setZone("z-1")
+              .setResourceTenant("t-1")
+              .setZoneId("z-1")
               .setResourceId("r-3")
               .setRenderedContent("{\"instance\":3, \"state\":1}"),
           // monitor binding for another resource for the same tenant
           new BoundMonitorDTO()
               .setMonitorId(id3)
-              .setTargetTenant("t-1")
-              .setZone("z-1")
+              .setResourceTenant("t-1")
+              .setZoneId("z-1")
               .setResourceId("r-4")
               .setRenderedContent("{\"instance\":3, \"state\":1}")
       );
@@ -274,15 +272,15 @@ public class EnvoyRegistryTest {
           // #3 UNCHANGED for both resources
           new BoundMonitorDTO()
               .setMonitorId(id3)
-              .setTargetTenant("t-1")
-              .setZone("z-1")
+              .setResourceTenant("t-1")
+              .setZoneId("z-1")
               .setResourceId("r-3")
               .setRenderedContent("{\"instance\":3, \"state\":1}"),
           // monitor binding for another resource for the same tenant
           new BoundMonitorDTO()
               .setMonitorId(id3)
-              .setTargetTenant("t-1")
-              .setZone("z-1")
+              .setResourceTenant("t-1")
+              .setZoneId("z-1")
               .setResourceId("r-4")
               .setRenderedContent("{\"instance\":3, \"state\":1}"),
           // #4 CREATED

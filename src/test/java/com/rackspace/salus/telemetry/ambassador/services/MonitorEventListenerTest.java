@@ -79,13 +79,13 @@ public class MonitorEventListenerTest {
         .setMonitorId(id1)
         .setResourceId("r-1")
         .setAgentType(AgentType.TELEGRAF)
-        .setTargetTenant("t-1")
+        .setResourceTenant("t-1")
         .setRenderedContent("content1"),
         new BoundMonitorDTO()
         .setMonitorId(id2)
         .setResourceId("r-2")
         .setAgentType(AgentType.FILEBEAT)
-        .setTargetTenant("t-2")
+        .setResourceTenant("t-2")
         .setRenderedContent("content2")
     );
 
@@ -102,8 +102,7 @@ public class MonitorEventListenerTest {
         .thenReturn(changes);
 
     MonitorBoundEvent event = new MonitorBoundEvent()
-        .setEnvoyId("e-1")
-        .setOperationType(OperationType.CREATE);
+        .setEnvoyId("e-1");
 
     monitorEventListener.handleMessage(event);
 
