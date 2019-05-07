@@ -18,6 +18,7 @@ package com.rackspace.salus.telemetry.ambassador.services;
 
 import static com.rackspace.salus.common.messaging.KafkaMessageKeyBuilder.buildMessageKey;
 import static com.rackspace.salus.telemetry.model.LabelNamespaces.applyNamespace;
+import static java.util.Collections.emptyList;
 
 import com.google.common.hash.HashCode;
 import com.google.common.hash.HashFunction;
@@ -51,7 +52,6 @@ import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -220,11 +220,7 @@ public class EnvoyRegistry {
 
             })
             .thenApply(leaseId -> {
-                // internal tracking
-
                 envoys.put(envoyId, new EnvoyEntry(instructionStreamObserver, tenantId, resourceId));
-                resourceLabelsService.trackResource(tenantId, resourceId, envoyLabels);
-
                 return leaseId;
             })
             .thenCompose(leaseId -> registerInZone(envoyId, resourceId, zone, leaseId))
@@ -462,6 +458,7 @@ public class EnvoyRegistry {
               .setMonitorId(removed.monitorId)
               .setResourceTenant(removed.resourceTenantId)
               .setResourceId(removed.resourceId)
+              // rendered content is not used by envoy, but needs to be non-null for gRPC
               .setRenderedContent("")
           );
 
@@ -478,16 +475,15 @@ public class EnvoyRegistry {
         Set<ResourceKey> resourcesToRetain,
         HashMap<OperationType, List<BoundMonitorDTO>> changes) {
 
-      changes.get(OperationType.CREATE).stream()
+      changes.getOrDefault(OperationType.CREATE, emptyList()).stream()
           .map(EnvoyRegistry::buildResourceKey)
           .distinct()
           .forEach(resourceKey -> {
             resourceLabelsService
-                .trackResource(resourceKey.getTenantId(), resourceKey.getResourceId(),
-                    Collections.emptyMap()
+                .trackResource(resourceKey.getTenantId(), resourceKey.getResourceId()
                 );
           });
-      changes.get(OperationType.DELETE).stream()
+      changes.getOrDefault(OperationType.DELETE, emptyList()).stream()
           .map(EnvoyRegistry::buildResourceKey)
           .filter(resourceKey -> !resourcesToRetain.contains(resourceKey))
           .distinct()

@@ -1,8 +1,7 @@
 package com.rackspace.salus.telemetry.ambassador.services;
 
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.hasItem;
-import static org.hamcrest.Matchers.hasProperty;
+import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.nullValue;
@@ -10,7 +9,9 @@ import static org.junit.Assert.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import com.rackspace.salus.monitor_management.web.model.BoundMonitorDTO;
@@ -81,6 +82,9 @@ public class EnvoyRegistryTest {
 
   @MockBean
   ZoneStorage zoneStorage;
+
+  @MockBean
+  ResourceLabelsService resourceLabelsService;
 
   @Mock
   StreamObserver<EnvoyInstruction> streamObserver;
@@ -193,6 +197,8 @@ public class EnvoyRegistryTest {
                 .setTenantId("t-1")
                 .setEnvoyAddress("localhost")
         );
+
+    verifyNoMoreInteractions(kafkaTemplate, zoneAuthorizer, zoneStorage, resourceLabelsService);
   }
 
   @Test(expected = StatusException.class)
@@ -222,18 +228,23 @@ public class EnvoyRegistryTest {
   public void testApplyBoundMonitors() {
     envoyRegistry.createTestingEntry("e-1");
 
-    final UUID id1 = UUID.fromString("16caf730-48e8-47ba-0001-aa9babba8953");
-    final UUID id2 = UUID.fromString("16caf730-48e8-47ba-0002-aa9babba8953");
-    final UUID id3 = UUID.fromString("16caf730-48e8-47ba-0003-aa9babba8953");
-    final UUID id4 = UUID.fromString("16caf730-48e8-47ba-0004-aa9babba8953");
+    final UUID id1 = UUID.fromString("00000000-0000-0000-0001-000000000000");
+    final UUID id2 = UUID.fromString("00000000-0000-0000-0002-000000000000");
+    final UUID id3 = UUID.fromString("00000000-0000-0000-0003-000000000000");
+    final UUID id4 = UUID.fromString("00000000-0000-0000-0004-000000000000");
+    final UUID id5 = UUID.fromString("00000000-0000-0000-0005-000000000000");
 
+    // baseline bound monitors
     {
       final List<BoundMonitorDTO> boundMonitors = Arrays.asList(
           new BoundMonitorDTO()
               .setMonitorId(id1)
+              .setResourceTenant("t-1")
+              .setResourceId("r-1")
               .setRenderedContent("{\"instance\":1, \"state\":1}"),
           new BoundMonitorDTO()
               .setMonitorId(id2)
+              .setResourceTenant("t-1")
               .setResourceId("r-2")
               .setAgentType(AgentType.TELEGRAF)
               .setRenderedContent("{\"instance\":2, \"state\":1}"),
@@ -246,8 +257,8 @@ public class EnvoyRegistryTest {
           // monitor binding for another resource for the same tenant
           new BoundMonitorDTO()
               .setMonitorId(id3)
-              .setResourceTenant("t-1")
               .setZoneId("z-1")
+              .setResourceTenant("t-1")
               .setResourceId("r-4")
               .setRenderedContent("{\"instance\":3, \"state\":1}")
       );
@@ -261,49 +272,96 @@ public class EnvoyRegistryTest {
       assertThat(changes.get(OperationType.DELETE), nullValue());
     }
 
+    // Exercise some changes
     {
-      // Exercise some changes
       final List<BoundMonitorDTO> boundMonitors = Arrays.asList(
-          // #1 MODIFIED
+          // id1 MODIFIED
           new BoundMonitorDTO()
               .setMonitorId(id1)
+              .setResourceTenant("t-1")
+              .setResourceId("r-1")
               .setRenderedContent("{\"instance\":1, \"state\":2}"),
-          // #2 REMOVED
-          // #3 UNCHANGED for both resources
+          // id2 REMOVED
+          // id3, r-3 UNCHANGED
           new BoundMonitorDTO()
               .setMonitorId(id3)
               .setResourceTenant("t-1")
               .setZoneId("z-1")
               .setResourceId("r-3")
               .setRenderedContent("{\"instance\":3, \"state\":1}"),
-          // monitor binding for another resource for the same tenant
+          // id3, r-4 UNCHANGED
           new BoundMonitorDTO()
               .setMonitorId(id3)
               .setResourceTenant("t-1")
               .setZoneId("z-1")
               .setResourceId("r-4")
               .setRenderedContent("{\"instance\":3, \"state\":1}"),
-          // #4 CREATED
+          // id4, r-5 CREATED
           new BoundMonitorDTO()
               .setMonitorId(id4)
-              .setRenderedContent("{\"instance\":4, \"state\":1}")
-      );
+              .setResourceTenant("t-1")
+              .setResourceId("r-5")
+              .setRenderedContent("{\"instance\":4, \"state\":1}"),
+          // id5, r-5 CREATED to confirm resource label tracked only once per binding event
+          new BoundMonitorDTO()
+              .setMonitorId(id5)
+              .setResourceTenant("t-1")
+              .setResourceId("r-5")
+              .setRenderedContent("{\"instance\":5, \"state\":1}"),
+          // id5, r-1 CREATED to confirm resource label re-tracked on this binding event
+          new BoundMonitorDTO()
+              .setMonitorId(id5)
+              .setResourceTenant("t-1")
+              .setResourceId("r-1")
+              .setRenderedContent("{\"instance\":6, \"state\":1}")
+  );
 
       final Map<OperationType, List<BoundMonitorDTO>> changes = envoyRegistry
           .applyBoundMonitors("e-1", boundMonitors);
 
       assertThat(changes, notNullValue());
-      assertThat(changes.get(OperationType.CREATE), hasSize(1));
-      assertThat(changes.get(OperationType.CREATE), hasItem(hasProperty("monitorId", equalTo(id4))));
-      assertThat(changes.get(OperationType.UPDATE), hasSize(1));
-      assertThat(changes.get(OperationType.UPDATE), hasItem(hasProperty("monitorId", equalTo(id1))));
-      assertThat(changes.get(OperationType.DELETE), hasSize(1));
-      final List<BoundMonitorDTO> deleted = changes.get(OperationType.DELETE);
-      assertThat(deleted.get(0).getAgentType(), equalTo(AgentType.TELEGRAF));
-      assertThat(deleted.get(0).getMonitorId(), equalTo(id2));
-      assertThat(deleted.get(0).getResourceId(), equalTo("r-2"));
+      assertThat(changes.get(OperationType.CREATE), containsInAnyOrder(
+          new BoundMonitorDTO()
+              .setMonitorId(id4)
+              .setResourceTenant("t-1")
+              .setResourceId("r-5")
+              .setRenderedContent("{\"instance\":4, \"state\":1}"),
+          new BoundMonitorDTO()
+              .setMonitorId(id5)
+              .setResourceTenant("t-1")
+              .setResourceId("r-5")
+              .setRenderedContent("{\"instance\":5, \"state\":1}"),
+          new BoundMonitorDTO()
+              .setMonitorId(id5)
+              .setResourceTenant("t-1")
+              .setResourceId("r-1")
+              .setRenderedContent("{\"instance\":6, \"state\":1}")
+      ));
+      assertThat(changes.get(OperationType.UPDATE), contains(
+          new BoundMonitorDTO()
+              .setMonitorId(id1)
+              .setResourceTenant("t-1")
+              .setResourceId("r-1")
+              .setRenderedContent("{\"instance\":1, \"state\":2}")
+      ));
+      assertThat(changes.get(OperationType.DELETE), contains(
+          new BoundMonitorDTO()
+              .setMonitorId(id2)
+              .setResourceTenant("t-1")
+              .setResourceId("r-2")
+              .setAgentType(AgentType.TELEGRAF)
+              // rendered content is not used by envoy, but needs to be non-null for gRPC
+              .setRenderedContent("")
+      ));
     }
 
+    verify(resourceLabelsService, times(2)).trackResource("t-1", "r-1");
+    verify(resourceLabelsService).trackResource("t-1", "r-2");
+    verify(resourceLabelsService).trackResource("t-1", "r-3");
+    verify(resourceLabelsService).trackResource("t-1", "r-4");
+    verify(resourceLabelsService).trackResource("t-1", "r-5");
+    verify(resourceLabelsService).releaseResource("t-1", "r-2");
 
+    verifyNoMoreInteractions(resourceLabelsService);
   }
 }

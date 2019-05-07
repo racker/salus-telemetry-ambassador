@@ -23,6 +23,7 @@ import com.rackspace.salus.telemetry.messaging.ResourceEvent;
 import com.rackspace.salus.telemetry.model.Resource;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
+import java.util.Collections;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import lombok.extern.slf4j.Slf4j;
@@ -37,11 +38,17 @@ import org.springframework.stereotype.Service;
 /**
  * This service keeps track of the labels of resources by allowing for explicitly pulling the
  * labels during envoy attachment and by listening for resource change events.
+ * <p>
+ *   It is expected that resource tracking and releasing will be driven by the creation and removal
+ *   of bound monitors since a resource's labels are not important until metrics are flowing due
+ *   to a monitor sent down to the Envoy.
+ * </p>
  */
 @Slf4j
 @Service
 public class ResourceLabelsService implements ConsumerSeekAware {
 
+  static final String GROUP_ID_PREFIX = "ambassador-resources-";
   private final KafkaTopicProperties kafkaTopicProperties;
   private final ResourceApi resourceApi;
   private final RetryTemplate retryTemplate;
@@ -60,26 +67,25 @@ public class ResourceLabelsService implements ConsumerSeekAware {
   }
 
   @SuppressWarnings("unused") // used by SpEL
-  public String getTopic() {
+  String getTopic() {
     return kafkaTopicProperties.getResources();
   }
 
   @SuppressWarnings("unused") // used in SpEL
-  public String getGroupId() throws UnknownHostException {
-    return "ambassador-resources-"+ InetAddress.getLocalHost().getHostAddress();
+  String getGroupId() throws UnknownHostException {
+    return GROUP_ID_PREFIX + InetAddress.getLocalHost().getHostAddress();
   }
 
   /**
    * Indicate that a resource should be tracked for label changes
    * @param tenantId the tenant owning the resource
    * @param resourceId the resourceId of the resource
-   * @param initialLabels the initial labels, such as those provided during Envoy attachment
    */
-  public void trackResource(String tenantId, String resourceId, Map<String,String> initialLabels) {
+  void trackResource(String tenantId, String resourceId) {
     final ResourceKey key = new ResourceKey(tenantId, resourceId);
 
-    // initialize entry with the envoy labels and presence of the key indicates tracking
-    resources.putIfAbsent(key, initialLabels);
+    // initialize entry since presence of the key indicates tracking
+    resources.putIfAbsent(key, Collections.emptyMap());
 
     pullResource(key);
   }
@@ -89,7 +95,7 @@ public class ResourceLabelsService implements ConsumerSeekAware {
    * @param tenantId the tenant owning the resource
    * @param resourceId the resourceId of the resource
    */
-  public void releaseResource(String tenantId, String resourceId) {
+  void releaseResource(String tenantId, String resourceId) {
     final Map<String, String> removed = resources.remove(new ResourceKey(tenantId, resourceId));
     if (removed == null) {
       log.debug("Released tenantId={} resourceId={} that wasn't being tracked", tenantId, resourceId);
@@ -125,7 +131,9 @@ public class ResourceLabelsService implements ConsumerSeekAware {
           }
       );
 
-      resources.put(key, resourceLabels);
+      if (resourceLabels != null) {
+        resources.put(key, resourceLabels);
+      }
     });
   }
 
@@ -135,7 +143,7 @@ public class ResourceLabelsService implements ConsumerSeekAware {
    * @param resourceId the resourceId of the resource
    * @return the latest tracked labels or null if the resource is not being tracked
    */
-  public Map<String, String> getResourceLabels(String tenantId, String resourceId) {
+  Map<String, String> getResourceLabels(String tenantId, String resourceId) {
     return resources.get(new ResourceKey(tenantId, resourceId));
   }
 

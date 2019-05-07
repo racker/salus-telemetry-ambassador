@@ -121,7 +121,7 @@ public class MetricRouterTest {
 
         metricRouter.route("t1", "envoy-1", postedMetric);
 
-        verify(resourceLabelsService).getResourceLabels("t1", "r-of-envoy");
+        verify(resourceLabelsService).getResourceLabels("t-some-other", "r-other");
         verify(kafkaEgress).send("t-some-other", KafkaMessageType.METRIC,
             "{\"timestamp\":\"2018-10-08T20:30:13.123Z\",\"accountType\":\"RCN\",\"account\":\"t-some-other\",\"device\":\"r-other\",\"deviceLabel\":\"\",\"deviceMetadata\":{\"hostname\":\"host1\",\"os\":\"linux\"},\"monitoringSystem\":\"SALUS\",\"systemMetadata\":{\"envoyId\":\"envoy-1\"},\"collectionName\":\"cpu\",\"collectionLabel\":\"\",\"collectionTarget\":\"\",\"collectionMetadata\":{\"cpu\":\"cpu1\"},\"ivalues\":{},\"fvalues\":{\"usage\":1.45},\"svalues\":{\"status\":\"enabled\"},\"units\":{}}");
 
