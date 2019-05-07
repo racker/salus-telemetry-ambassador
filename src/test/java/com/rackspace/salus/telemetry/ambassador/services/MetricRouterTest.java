@@ -51,6 +51,9 @@ public class MetricRouterTest {
     @MockBean
     EnvoyRegistry envoyRegistry;
 
+    @MockBean
+    ResourceLabelsService resourceLabelsService;
+
     @Autowired
     MetricRouter metricRouter;
 
@@ -61,11 +64,11 @@ public class MetricRouterTest {
         envoyLabels.put("hostname", "host1");
         envoyLabels.put("os", "linux");
 
-        when(envoyRegistry.getEnvoyLabels(any()))
+        when(resourceLabelsService.getResourceLabels(any(), any()))
             .thenReturn(envoyLabels);
 
         when(envoyRegistry.getResourceId(any()))
-            .thenReturn("resourceId");
+            .thenReturn("r-1");
 
         final TelemetryEdge.PostedMetric postedMetric = TelemetryEdge.PostedMetric.newBuilder()
             .setMetric(TelemetryEdge.Metric.newBuilder()
@@ -81,10 +84,10 @@ public class MetricRouterTest {
 
         metricRouter.route("t1", "envoy-1", postedMetric);
 
-        verify(envoyRegistry).getEnvoyLabels("envoy-1");
+        verify(resourceLabelsService).getResourceLabels("t1", "r-1");
         verify(envoyRegistry).getResourceId("envoy-1");
         verify(kafkaEgress).send("t1", KafkaMessageType.METRIC,
-            "{\"timestamp\":\"2018-10-08T20:30:13.123Z\",\"accountType\":\"RCN\",\"account\":\"t1\",\"device\":\"resourceId\",\"deviceLabel\":\"\",\"deviceMetadata\":{\"hostname\":\"host1\",\"os\":\"linux\"},\"monitoringSystem\":\"SALUS\",\"systemMetadata\":{\"envoyId\":\"envoy-1\"},\"collectionName\":\"cpu\",\"collectionLabel\":\"\",\"collectionTarget\":\"\",\"collectionMetadata\":{\"cpu\":\"cpu1\"},\"ivalues\":{},\"fvalues\":{\"usage\":1.45},\"svalues\":{\"status\":\"enabled\"},\"units\":{}}");
+            "{\"timestamp\":\"2018-10-08T20:30:13.123Z\",\"accountType\":\"RCN\",\"account\":\"t1\",\"device\":\"r-1\",\"deviceLabel\":\"\",\"deviceMetadata\":{\"hostname\":\"host1\",\"os\":\"linux\"},\"monitoringSystem\":\"SALUS\",\"systemMetadata\":{\"envoyId\":\"envoy-1\"},\"collectionName\":\"cpu\",\"collectionLabel\":\"\",\"collectionTarget\":\"\",\"collectionMetadata\":{\"cpu\":\"cpu1\"},\"ivalues\":{},\"fvalues\":{\"usage\":1.45},\"svalues\":{\"status\":\"enabled\"},\"units\":{}}");
 
         verifyNoMoreInteractions(kafkaEgress, envoyRegistry);
     }
@@ -96,7 +99,7 @@ public class MetricRouterTest {
         envoyLabels.put("hostname", "host1");
         envoyLabels.put("os", "linux");
 
-        when(envoyRegistry.getEnvoyLabels(any()))
+        when(resourceLabelsService.getResourceLabels(any(), any()))
             .thenReturn(envoyLabels);
 
         when(envoyRegistry.getResourceId(any()))
@@ -118,7 +121,7 @@ public class MetricRouterTest {
 
         metricRouter.route("t1", "envoy-1", postedMetric);
 
-        verify(envoyRegistry).getEnvoyLabels("envoy-1");
+        verify(resourceLabelsService).getResourceLabels("t1", "r-of-envoy");
         verify(kafkaEgress).send("t-some-other", KafkaMessageType.METRIC,
             "{\"timestamp\":\"2018-10-08T20:30:13.123Z\",\"accountType\":\"RCN\",\"account\":\"t-some-other\",\"device\":\"r-other\",\"deviceLabel\":\"\",\"deviceMetadata\":{\"hostname\":\"host1\",\"os\":\"linux\"},\"monitoringSystem\":\"SALUS\",\"systemMetadata\":{\"envoyId\":\"envoy-1\"},\"collectionName\":\"cpu\",\"collectionLabel\":\"\",\"collectionTarget\":\"\",\"collectionMetadata\":{\"cpu\":\"cpu1\"},\"ivalues\":{},\"fvalues\":{\"usage\":1.45},\"svalues\":{\"status\":\"enabled\"},\"units\":{}}");
 

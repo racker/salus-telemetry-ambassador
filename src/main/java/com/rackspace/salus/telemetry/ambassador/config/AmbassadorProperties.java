@@ -57,4 +57,9 @@ public class AmbassadorProperties {
      * Only Envoys of these tenants are allowed to advertise a zone with prefixed with 'publicZonePrefix'
      */
     List<String> publicZoneTenants;
+
+    /**
+     * When calling APIs of other microservices, this will be the max attempts retried
+     */
+    int maxApiRetryAttempts = 10;
 }

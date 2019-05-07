@@ -24,6 +24,8 @@ public class BoundMonitorUtils {
   public static final String LABEL_RESOURCE = "resource_id";
 
   public static String buildConfiguredMonitorId(BoundMonitorDTO boundMonitor) {
+    // don't need to qualify resource ID by resource tenant since monitor ID is already distinct
+    // enough and already a per-tenant object
     return String.join("_", boundMonitor.getMonitorId().toString(), boundMonitor.getResourceId());
   }
 }

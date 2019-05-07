@@ -16,8 +16,11 @@
 
 package com.rackspace.salus.telemetry.ambassador.config;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rackspace.salus.monitor_management.web.client.MonitorApi;
 import com.rackspace.salus.monitor_management.web.client.MonitorApiClient;
+import com.rackspace.salus.resource_management.web.client.ResourceApi;
+import com.rackspace.salus.resource_management.web.client.ResourceApiClient;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.context.annotation.Bean;
@@ -38,6 +41,16 @@ public class RestClientsConfig {
     return new MonitorApiClient(
         restTemplateBuilder
             .rootUri(servicesProperties.getMonitorManagementUrl())
+            .build()
+    );
+  }
+
+  @Bean
+  public ResourceApi resourceApi(ObjectMapper objectMapper, RestTemplateBuilder restTemplateBuilder) {
+    return new ResourceApiClient(
+        objectMapper,
+        restTemplateBuilder
+            .rootUri(servicesProperties.getResourceManagementUrl())
             .build()
     );
   }

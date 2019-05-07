@@ -47,22 +47,20 @@ public class MetricRouter {
     private final EncoderFactory avroEncoderFactory;
     private final KafkaEgress kafkaEgress;
     private final EnvoyRegistry envoyRegistry;
+    private final ResourceLabelsService resourceLabelsService;
 
     @Autowired
-    public MetricRouter(EncoderFactory avroEncoderFactory, KafkaEgress kafkaEgress, EnvoyRegistry envoyRegistry) {
+    public MetricRouter(EncoderFactory avroEncoderFactory, KafkaEgress kafkaEgress,
+                        EnvoyRegistry envoyRegistry, ResourceLabelsService resourceLabelsService) {
         this.avroEncoderFactory = avroEncoderFactory;
         this.kafkaEgress = kafkaEgress;
         this.envoyRegistry = envoyRegistry;
+        this.resourceLabelsService = resourceLabelsService;
         universalTimestampFormatter = DateTimeFormatter.ISO_INSTANT;
     }
 
     public void route(String tenantId, String envoyId,
         PostedMetric postedMetric) {
-
-        final Map<String, String> envoyLabels = envoyRegistry.getEnvoyLabels(envoyId);
-        if (envoyLabels == null) {
-            throw new IllegalArgumentException("Unable to find Envoy in the registry");
-        }
 
         final TelemetryEdge.NameTagValueMetric nameTagValue = postedMetric.getMetric().getNameTagValue();
         if (nameTagValue == null) {
@@ -87,12 +85,21 @@ public class MetricRouter {
             tenantId = taggedTargetTenant;
         }
 
+        Map<String, String> labels = resourceLabelsService.getResourceLabels(tenantId, resourceId);
+        if (labels == null) {
+            log.warn(
+                "No resource labels are being tracked for tenant={} resource={}",
+                tenantId, resourceId
+            );
+            labels = Collections.emptyMap();
+        }
+
         final ExternalMetric externalMetric = ExternalMetric.newBuilder()
             .setAccountType(AccountType.RCN)
             .setAccount(tenantId)
             .setTimestamp(universalTimestampFormatter.format(timestamp))
             .setDevice(resourceId)
-            .setDeviceMetadata(envoyLabels)
+            .setDeviceMetadata(labels)
             .setMonitoringSystem(MonitoringSystem.SALUS)
             .setSystemMetadata(Collections.singletonMap("envoyId", envoyId))
             .setCollectionMetadata(tagsMap)

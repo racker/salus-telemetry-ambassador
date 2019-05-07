@@ -1,0 +1,164 @@
+/*
+ * Copyright 2019 Rackspace US, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.rackspace.salus.telemetry.ambassador.services;
+
+import com.rackspace.salus.common.messaging.KafkaTopicProperties;
+import com.rackspace.salus.resource_management.web.client.ResourceApi;
+import com.rackspace.salus.telemetry.ambassador.types.ResourceKey;
+import com.rackspace.salus.telemetry.messaging.ResourceEvent;
+import com.rackspace.salus.telemetry.model.Resource;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import lombok.extern.slf4j.Slf4j;
+import org.apache.kafka.common.TopicPartition;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.task.TaskExecutor;
+import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.kafka.listener.ConsumerSeekAware;
+import org.springframework.retry.support.RetryTemplate;
+import org.springframework.stereotype.Service;
+
+/**
+ * This service keeps track of the labels of resources by allowing for explicitly pulling the
+ * labels during envoy attachment and by listening for resource change events.
+ */
+@Slf4j
+@Service
+public class ResourceLabelsService implements ConsumerSeekAware {
+
+  private final KafkaTopicProperties kafkaTopicProperties;
+  private final ResourceApi resourceApi;
+  private final RetryTemplate retryTemplate;
+  private final TaskExecutor taskExecutor;
+
+  private final ConcurrentHashMap<ResourceKey, Map<String, String>/*labels*/> resources =
+      new ConcurrentHashMap<>();
+
+  @Autowired
+  public ResourceLabelsService(KafkaTopicProperties kafkaTopicProperties, ResourceApi resourceApi,
+                               RetryTemplate retryTemplate, TaskExecutor taskExecutor) {
+    this.kafkaTopicProperties = kafkaTopicProperties;
+    this.resourceApi = resourceApi;
+    this.retryTemplate = retryTemplate;
+    this.taskExecutor = taskExecutor;
+  }
+
+  @SuppressWarnings("unused") // used by SpEL
+  public String getTopic() {
+    return kafkaTopicProperties.getResources();
+  }
+
+  @SuppressWarnings("unused") // used in SpEL
+  public String getGroupId() throws UnknownHostException {
+    return "ambassador-resources-"+ InetAddress.getLocalHost().getHostAddress();
+  }
+
+  /**
+   * Indicate that a resource should be tracked for label changes
+   * @param tenantId the tenant owning the resource
+   * @param resourceId the resourceId of the resource
+   * @param initialLabels the initial labels, such as those provided during Envoy attachment
+   */
+  public void trackResource(String tenantId, String resourceId, Map<String,String> initialLabels) {
+    final ResourceKey key = new ResourceKey(tenantId, resourceId);
+
+    // initialize entry with the envoy labels and presence of the key indicates tracking
+    resources.putIfAbsent(key, initialLabels);
+
+    pullResource(key);
+  }
+
+  /**
+   * Indicate that the resource no longer needs to be tracked, such as due to envoy detachment
+   * @param tenantId the tenant owning the resource
+   * @param resourceId the resourceId of the resource
+   */
+  public void releaseResource(String tenantId, String resourceId) {
+    final Map<String, String> removed = resources.remove(new ResourceKey(tenantId, resourceId));
+    if (removed == null) {
+      log.debug("Released tenantId={} resourceId={} that wasn't being tracked", tenantId, resourceId);
+    }
+  }
+
+  /**
+   * Asynchronously query the labels of the resource from resource management microservice and
+   * retry if the service throws an error
+   */
+  private void pullResource(ResourceKey key) {
+
+    taskExecutor.execute(() -> {
+      final String tenantId = key.getTenantId();
+      final String resourceId = key.getResourceId();
+
+      log.debug("Pulling labels for tenantId={} resourceId={}", tenantId, resourceId);
+
+      final Map<String, String> resourceLabels = retryTemplate.execute(
+          retryContext -> {
+
+            log.debug("Trying to query for tenantId={} resourceId={} try={}",
+                tenantId, resourceId, retryContext.getRetryCount());
+
+            final Resource resource = resourceApi.getByResourceId(tenantId, resourceId);
+
+            return resource.getLabels();
+          },
+          retryContext -> {
+            log.warn(
+                "Failed to pull resource labels for tenant={} resourceId={}", tenantId, resourceId);
+            return null;
+          }
+      );
+
+      resources.put(key, resourceLabels);
+    });
+  }
+
+  /**
+   * Gets the latest tracked labels for the given resource
+   * @param tenantId the tenant owning the resource
+   * @param resourceId the resourceId of the resource
+   * @return the latest tracked labels or null if the resource is not being tracked
+   */
+  public Map<String, String> getResourceLabels(String tenantId, String resourceId) {
+    return resources.get(new ResourceKey(tenantId, resourceId));
+  }
+
+  @KafkaListener(topics = "#{__listener.topic}", groupId = "#{__listener.groupId}")
+  public void handResourceEvent(ResourceEvent event) {
+    log.debug("Handling resource event={}", event);
+    final ResourceKey key = new ResourceKey(event.getTenantId(), event.getResourceId());
+    if (resources.containsKey(key)) {
+      pullResource(key);
+    }
+  }
+
+  @Override
+  public void onPartitionsAssigned(Map<TopicPartition, Long> assignments,
+                                   ConsumerSeekCallback callback) {
+    // seek to newest offset
+    assignments.forEach((tp, currentOffset) -> callback.seekToEnd(tp.topic(), tp.partition()));
+  }
+
+  @Override
+  public void registerSeekCallback(ConsumerSeekCallback callback) { }
+
+  @Override
+  public void onIdleContainer(Map<TopicPartition, Long> assignments,
+                              ConsumerSeekCallback callback) { }
+}
