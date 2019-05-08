@@ -66,13 +66,13 @@ public class ResourceLabelsService implements ConsumerSeekAware {
     this.taskExecutor = taskExecutor;
   }
 
-  @SuppressWarnings("unused") // used by SpEL
-  String getTopic() {
+  @SuppressWarnings({"unused", "WeakerAccess"}) // used by SpEL
+  public String getTopic() {
     return kafkaTopicProperties.getResources();
   }
 
-  @SuppressWarnings("unused") // used in SpEL
-  String getGroupId() throws UnknownHostException {
+  @SuppressWarnings({"unused", "WeakerAccess"}) // used by SpEL
+  public String getGroupId() throws UnknownHostException {
     return GROUP_ID_PREFIX + InetAddress.getLocalHost().getHostAddress();
   }
 
