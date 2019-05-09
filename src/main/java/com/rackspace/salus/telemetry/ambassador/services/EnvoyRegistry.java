@@ -148,8 +148,8 @@ public class EnvoyRegistry {
         this.envoyLabelManagement = envoyLabelManagement;
         this.envoyLeaseTracking = envoyLeaseTracking;
         this.envoyResourceManagement = envoyResourceManagement;
-      this.resourceLabelsService = resourceLabelsService;
-      this.zoneAuthorizer = zoneAuthorizer;
+        this.resourceLabelsService = resourceLabelsService;
+        this.zoneAuthorizer = zoneAuthorizer;
         this.zoneStorage = zoneStorage;
         this.jsonPrinter = jsonPrinter;
         this.kafkaTemplate = kafkaTemplate;
