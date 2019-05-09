@@ -26,6 +26,9 @@ import static org.mockito.Mockito.when;
 import com.rackspace.salus.services.TelemetryEdge;
 import com.rackspace.salus.telemetry.ambassador.config.AvroConfig;
 import com.rackspace.salus.telemetry.messaging.KafkaMessageType;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.util.HashMap;
 import java.util.Map;
 import org.junit.Test;
@@ -35,7 +38,9 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.test.context.junit4.SpringRunner;
+import org.springframework.util.FileCopyUtils;
 
 @RunWith(SpringRunner.class)
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
@@ -93,7 +98,7 @@ public class MetricRouterTest {
     }
 
     @Test
-    public void testRouteMetric_withTargetTenant() {
+    public void testRouteMetric_withTargetTenant() throws IOException {
 
         Map<String, String> envoyLabels = new HashMap<>();
         envoyLabels.put("hostname", "host1");
@@ -123,8 +128,14 @@ public class MetricRouterTest {
 
         verify(resourceLabelsService).getResourceLabels("t-some-other", "r-other");
         verify(kafkaEgress).send("t-some-other", KafkaMessageType.METRIC,
-            "{\"timestamp\":\"2018-10-08T20:30:13.123Z\",\"accountType\":\"RCN\",\"account\":\"t-some-other\",\"device\":\"r-other\",\"deviceLabel\":\"\",\"deviceMetadata\":{\"hostname\":\"host1\",\"os\":\"linux\"},\"monitoringSystem\":\"SALUS\",\"systemMetadata\":{\"envoyId\":\"envoy-1\"},\"collectionName\":\"cpu\",\"collectionLabel\":\"\",\"collectionTarget\":\"\",\"collectionMetadata\":{\"cpu\":\"cpu1\"},\"ivalues\":{},\"fvalues\":{\"usage\":1.45},\"svalues\":{\"status\":\"enabled\"},\"units\":{}}");
+            readContent("/MetricRouterTest/testRouteMetric_withTargetTenant.json"));
 
         verifyNoMoreInteractions(kafkaEgress, envoyRegistry);
+    }
+
+    private static String readContent(String resource) throws IOException {
+        try (InputStream in = new ClassPathResource(resource).getInputStream()) {
+            return FileCopyUtils.copyToString(new InputStreamReader(in));
+        }
     }
 }
