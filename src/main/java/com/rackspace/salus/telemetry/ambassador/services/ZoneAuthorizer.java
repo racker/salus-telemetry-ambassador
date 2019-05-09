@@ -16,6 +16,8 @@
 
 package com.rackspace.salus.telemetry.ambassador.services;
 
+import com.rackspace.salus.monitor_management.web.client.ZoneApi;
+import com.rackspace.salus.monitor_management.web.model.ZoneDTO;
 import com.rackspace.salus.telemetry.ambassador.config.AmbassadorProperties;
 import com.rackspace.salus.telemetry.ambassador.types.ZoneNotAuthorizedException;
 import com.rackspace.salus.telemetry.etcd.types.ResolvedZone;
@@ -23,6 +25,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
+import org.springframework.web.client.ResourceAccessException;
+import java.util.List;
 
 /**
  * Handles validation and authorization of public zones.
@@ -32,10 +36,12 @@ import org.springframework.util.StringUtils;
 public class ZoneAuthorizer {
 
   private final AmbassadorProperties properties;
+  private final ZoneApi zoneApi;
 
   @Autowired
-  public ZoneAuthorizer(AmbassadorProperties properties) {
+  public ZoneAuthorizer(AmbassadorProperties properties, ZoneApi zoneApi) {
     this.properties = properties;
+    this.zoneApi = zoneApi;
   }
 
   /**
@@ -46,7 +52,7 @@ public class ZoneAuthorizer {
    * @return the zone, potentially transformed with further namespacing.
    * @throws ZoneNotAuthorizedException when the given zone is public and the tenant is not authorized
    */
-  public ResolvedZone authorize(String tenantId, String zone) throws ZoneNotAuthorizedException {
+  public ResolvedZone authorize(String tenantId, String zone) throws ZoneNotAuthorizedException, IllegalArgumentException {
     if (!StringUtils.hasText(zone)) {
       return null;
     }
@@ -62,10 +68,34 @@ public class ZoneAuthorizer {
         throw new ZoneNotAuthorizedException(tenantId, zone);
       }
 
+      validateZoneAvailable(tenantId, zone);
       return ResolvedZone.createPublicZone(zone);
     }
     else {
+      validateZoneAvailable(tenantId, zone);
       return ResolvedZone.createPrivateZone(tenantId, zone);
     }
+  }
+
+  /**
+   * Checks if the provided zone is an option for the client to connect to.
+   * Any zone provided must have previously been created by ZoneManagement.
+   *
+   * @param tenantId The tenantId of the connecting envoy.
+   * @param zone The zone provided in the envoySummary.
+   * @throws IllegalArgumentException if the zone is not found.
+   */
+  private void validateZoneAvailable(String tenantId, String zone) throws IllegalArgumentException {
+    List<ZoneDTO> zones;
+    try {
+      zones = zoneApi.getAvailableZones(tenantId);
+    } catch (ResourceAccessException e) {
+      // need to do something here to handle things more gracefully.
+      throw new RuntimeException("Unable to validate zones.");
+    }
+    boolean found = zones.stream().anyMatch(z -> z.getName().equals(zone));
+
+    log.error("Found {} zones for tenant", zoneApi.getAvailableZones(tenantId).size());
+    if (!found) throw new IllegalArgumentException("Provided zone does not exist: " + zone);
   }
 }

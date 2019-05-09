@@ -16,27 +16,47 @@
 
 package com.rackspace.salus.telemetry.ambassador.services;
 
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.notNullValue;
-import static org.hamcrest.Matchers.nullValue;
+import static org.hamcrest.Matchers.*;
 import static org.junit.Assert.assertThat;
+import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.anyString;
 
+import com.rackspace.salus.monitor_management.web.client.ZoneApi;
+import com.rackspace.salus.monitor_management.web.model.ZoneDTO;
 import com.rackspace.salus.telemetry.ambassador.config.AmbassadorProperties;
 import com.rackspace.salus.telemetry.ambassador.types.ZoneNotAuthorizedException;
 import com.rackspace.salus.telemetry.etcd.types.ResolvedZone;
 import java.util.Collections;
-import org.junit.Test;
 
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.junit4.SpringRunner;
+import uk.co.jemos.podam.api.PodamFactory;
+import uk.co.jemos.podam.api.PodamFactoryImpl;
+
+@RunWith(SpringRunner.class)
 public class ZoneAuthorizerTest {
+
+  @MockBean
+  ZoneApi zoneApi;
+
+  private PodamFactory podamFactory = new PodamFactoryImpl();
+
 
   @Test
   public void testNonPublic() throws ZoneNotAuthorizedException {
     AmbassadorProperties properties = new AmbassadorProperties();
     properties.setPublicZonePrefix("public/");
 
-    final ZoneAuthorizer authorizer = new ZoneAuthorizer(properties);
+    final ZoneAuthorizer authorizer = new ZoneAuthorizer(properties, zoneApi);
 
-    final ResolvedZone zone = authorizer.authorize("any tenant", "notPublic");
+    ZoneDTO zoneDTO = podamFactory.manufacturePojo(ZoneDTO.class);
+    zoneDTO.setName("notPublic");
+
+    when(zoneApi.getAvailableZones(anyString())).thenReturn(Collections.singletonList(zoneDTO));
+
+    final ResolvedZone zone = authorizer.authorize("any tenant", zoneDTO.getName());
 
     assertThat(zone, notNullValue());
     assertThat(zone.getId(), equalTo("notPublic"));
@@ -49,7 +69,7 @@ public class ZoneAuthorizerTest {
     AmbassadorProperties properties = new AmbassadorProperties();
     properties.setPublicZonePrefix("public/");
 
-    final ZoneAuthorizer authorizer = new ZoneAuthorizer(properties);
+    final ZoneAuthorizer authorizer = new ZoneAuthorizer(properties, zoneApi);
 
     // should fail
     authorizer.authorize("any tenant", "public/us-east");
@@ -61,7 +81,7 @@ public class ZoneAuthorizerTest {
     properties.setPublicZonePrefix("public/");
     properties.setPublicZoneTenants(Collections.singletonList("admin-tenant"));
 
-    final ZoneAuthorizer authorizer = new ZoneAuthorizer(properties);
+    final ZoneAuthorizer authorizer = new ZoneAuthorizer(properties, zoneApi);
 
     // should fail
     authorizer.authorize("any tenant", "public/us-east");
@@ -73,19 +93,37 @@ public class ZoneAuthorizerTest {
     properties.setPublicZonePrefix("public/");
     properties.setPublicZoneTenants(Collections.singletonList("admin-tenant"));
 
-    final ZoneAuthorizer authorizer = new ZoneAuthorizer(properties);
+    ZoneDTO zoneDTO = podamFactory.manufacturePojo(ZoneDTO.class);
+    zoneDTO.setName("public/us-east");
 
-    final ResolvedZone zone = authorizer.authorize("admin-tenant", "public/us-east");
+    when(zoneApi.getAvailableZones(anyString())).thenReturn(Collections.singletonList(zoneDTO));
+
+    final ZoneAuthorizer authorizer = new ZoneAuthorizer(properties, zoneApi);
+
+    final ResolvedZone zone = authorizer.authorize("admin-tenant", zoneDTO.getName());
 
     assertThat(zone, notNullValue());
     assertThat(zone.getId(), equalTo("public/us-east"));
     assertThat(zone.isPublicZone(), equalTo(true));
   }
 
+  @Test(expected = IllegalArgumentException.class)
+  public void testPublicZoneDoesntExist() throws ZoneNotAuthorizedException {
+    AmbassadorProperties properties = new AmbassadorProperties();
+    properties.setPublicZonePrefix("public/");
+    properties.setPublicZoneTenants(Collections.singletonList("admin-tenant"));
+
+    when(zoneApi.getAvailableZones(anyString())).thenReturn(Collections.emptyList());
+
+    final ZoneAuthorizer authorizer = new ZoneAuthorizer(properties, zoneApi);
+
+    authorizer.authorize("admin-tenant", "public/us-east");
+  }
+
   @Test
   public void testResolvingNullZone() throws ZoneNotAuthorizedException {
     AmbassadorProperties properties = new AmbassadorProperties();
-    final ZoneAuthorizer authorizer = new ZoneAuthorizer(properties);
+    final ZoneAuthorizer authorizer = new ZoneAuthorizer(properties, zoneApi);
 
     final ResolvedZone zone = authorizer.authorize("any-tenant", null);
 
@@ -95,7 +133,7 @@ public class ZoneAuthorizerTest {
   @Test
   public void testResolvingEmptyZone() throws ZoneNotAuthorizedException {
     AmbassadorProperties properties = new AmbassadorProperties();
-    final ZoneAuthorizer authorizer = new ZoneAuthorizer(properties);
+    final ZoneAuthorizer authorizer = new ZoneAuthorizer(properties, zoneApi);
 
     final ResolvedZone zone = authorizer.authorize("any-tenant", "");
 
