@@ -96,7 +96,7 @@ public class ResourceLabelsServiceTest {
 
   @Test
   public void test_trackResource() {
-    final Map<String, String> expectedLabels = singletonMap("agent.discovered.os", "linux");
+    final Map<String, String> expectedLabels = singletonMap("agent_discovered_os", "linux");
 
     when(resourceApi.getByResourceId("t-1", "r-1"))
         .thenReturn(
@@ -116,7 +116,7 @@ public class ResourceLabelsServiceTest {
 
   @Test
   public void test_trackResource_failFirstQuery() {
-    final Map<String, String> expectedLabels = singletonMap("agent.discovered.os", "linux");
+    final Map<String, String> expectedLabels = singletonMap("agent_discovered_os", "linux");
 
     when(resourceApi.getByResourceId("t-1", "r-1"))
         .thenThrow(ResourceAccessException.class)
@@ -137,7 +137,7 @@ public class ResourceLabelsServiceTest {
 
   @Test
   public void test_trackResource_failAllQuery() {
-    final Map<String, String> expectedLabels = singletonMap("agent.discovered.os", "linux");
+    final Map<String, String> expectedLabels = singletonMap("agent_discovered_os", "linux");
 
     when(resourceApi.getByResourceId("t-1", "r-1"))
         .thenThrow(ResourceAccessException.class)
@@ -156,7 +156,7 @@ public class ResourceLabelsServiceTest {
 
   @Test
   public void test_releaseResource() {
-    final Map<String, String> expectedLabels = singletonMap("agent.discovered.os", "linux");
+    final Map<String, String> expectedLabels = singletonMap("agent_discovered_os", "linux");
 
     when(resourceApi.getByResourceId("t-1", "r-1"))
         .thenReturn(
