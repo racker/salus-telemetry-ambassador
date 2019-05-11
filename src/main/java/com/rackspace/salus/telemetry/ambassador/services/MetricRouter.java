@@ -24,6 +24,8 @@ import com.rackspace.monplat.protocol.MonitoringSystem;
 import com.rackspace.salus.services.TelemetryEdge;
 import com.rackspace.salus.services.TelemetryEdge.PostedMetric;
 import com.rackspace.salus.telemetry.messaging.KafkaMessageType;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -40,6 +42,10 @@ import org.apache.avro.specific.SpecificDatumWriter;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+/**
+ * This service routes to Kafka the metric objects that currently originate from Telegraf
+ * running as an agent of a tenant's Envoy or as an Envoy running as a public poller.
+ */
 @Service
 @Slf4j
 public class MetricRouter {
@@ -48,15 +54,21 @@ public class MetricRouter {
     private final KafkaEgress kafkaEgress;
     private final EnvoyRegistry envoyRegistry;
     private final ResourceLabelsService resourceLabelsService;
+    private final Counter metricsRouted;
+    private final Counter missingResourceLabelTracking;
 
     @Autowired
     public MetricRouter(EncoderFactory avroEncoderFactory, KafkaEgress kafkaEgress,
-                        EnvoyRegistry envoyRegistry, ResourceLabelsService resourceLabelsService) {
+                        EnvoyRegistry envoyRegistry, ResourceLabelsService resourceLabelsService,
+                        MeterRegistry meterRegistry) {
         this.avroEncoderFactory = avroEncoderFactory;
         this.kafkaEgress = kafkaEgress;
         this.envoyRegistry = envoyRegistry;
         this.resourceLabelsService = resourceLabelsService;
         universalTimestampFormatter = DateTimeFormatter.ISO_INSTANT;
+
+        metricsRouted = meterRegistry.counter("routed", "type", "metrics");
+        missingResourceLabelTracking = meterRegistry.counter("error", "cause", "missingResourceLabelTracking");
     }
 
     public void route(String tenantId, String envoyId,
@@ -91,6 +103,7 @@ public class MetricRouter {
                 "No resource labels are being tracked for tenant={} resource={}",
                 tenantId, resourceId
             );
+            missingResourceLabelTracking.increment();
             labels = Collections.emptyMap();
         }
 
@@ -119,6 +132,7 @@ public class MetricRouter {
             datumWriter.write(externalMetric, jsonEncoder);
             jsonEncoder.flush();
 
+            metricsRouted.increment();
             kafkaEgress.send(tenantId, KafkaMessageType.METRIC, out.toString(StandardCharsets.UTF_8.name()));
 
         } catch (IOException e) {

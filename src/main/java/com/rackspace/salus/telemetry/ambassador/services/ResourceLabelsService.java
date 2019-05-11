@@ -21,6 +21,8 @@ import com.rackspace.salus.resource_management.web.client.ResourceApi;
 import com.rackspace.salus.telemetry.ambassador.types.ResourceKey;
 import com.rackspace.salus.telemetry.messaging.ResourceEvent;
 import com.rackspace.salus.telemetry.model.Resource;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.Collections;
@@ -56,14 +58,20 @@ public class ResourceLabelsService implements ConsumerSeekAware {
 
   private final ConcurrentHashMap<ResourceKey, Map<String, String>/*labels*/> resources =
       new ConcurrentHashMap<>();
+  private final Counter releasingUntracked;
+  private final Counter failedLabelsPull;
 
   @Autowired
   public ResourceLabelsService(KafkaTopicProperties kafkaTopicProperties, ResourceApi resourceApi,
-                               RetryTemplate retryTemplate, TaskExecutor taskExecutor) {
+                               RetryTemplate retryTemplate, TaskExecutor taskExecutor,
+                               MeterRegistry meterRegistry) {
     this.kafkaTopicProperties = kafkaTopicProperties;
     this.resourceApi = resourceApi;
     this.retryTemplate = retryTemplate;
     this.taskExecutor = taskExecutor;
+
+    releasingUntracked = meterRegistry.counter("error", "cause", "releasingUntrackedResource");
+    failedLabelsPull = meterRegistry.counter("error", "cause", "failedResourceLabelPull");
   }
 
   @SuppressWarnings({"unused", "WeakerAccess"}) // used by SpEL
@@ -98,7 +106,8 @@ public class ResourceLabelsService implements ConsumerSeekAware {
   void releaseResource(String tenantId, String resourceId) {
     final Map<String, String> removed = resources.remove(new ResourceKey(tenantId, resourceId));
     if (removed == null) {
-      log.debug("Released tenantId={} resourceId={} that wasn't being tracked", tenantId, resourceId);
+      log.warn("Released tenantId={} resourceId={} that wasn't being tracked", tenantId, resourceId);
+      releasingUntracked.increment();
     }
   }
 
@@ -127,6 +136,7 @@ public class ResourceLabelsService implements ConsumerSeekAware {
           retryContext -> {
             log.warn(
                 "Failed to pull resource labels for tenant={} resourceId={}", tenantId, resourceId);
+            failedLabelsPull.increment();
             return null;
           }
       );
@@ -159,7 +169,10 @@ public class ResourceLabelsService implements ConsumerSeekAware {
   @Override
   public void onPartitionsAssigned(Map<TopicPartition, Long> assignments,
                                    ConsumerSeekCallback callback) {
-    // seek to newest offset
+    // Seek to newest offset since the baseline resource labels are pulled during the first
+    // bound monitor processing per resource. These resource events are used to ensure the
+    // labels remain up to date after monitor binding and until the resource tracking is released
+    // when last monitor binding for the resource is processed.
     assignments.forEach((tp, currentOffset) -> callback.seekToEnd(tp.topic(), tp.partition()));
   }
 

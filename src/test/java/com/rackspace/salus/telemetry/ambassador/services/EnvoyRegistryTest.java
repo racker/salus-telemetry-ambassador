@@ -96,7 +96,7 @@ public class EnvoyRegistryTest {
   public void postsAttachEventOnAttach() throws StatusException {
     final EnvoySummary envoySummary = EnvoySummary.newBuilder()
         .setResourceId("hostname:test-host")
-        .putLabels("discovered.os", "linux")
+        .putLabels("discovered_os", "linux")
         .build();
 
     final CompletableFuture<Long> assignedLease = CompletableFuture.completedFuture(1234L);
@@ -132,7 +132,7 @@ public class EnvoyRegistryTest {
             "t-1:hostname:test-host",
             new AttachEvent()
                 .setResourceId("hostname:test-host")
-                .setLabels(Collections.singletonMap("agent.discovered.os", "linux"))
+                .setLabels(Collections.singletonMap("agent_discovered_os", "linux"))
                 .setEnvoyId("e-1")
                 .setTenantId("t-1")
                 .setEnvoyAddress("localhost")
@@ -143,7 +143,7 @@ public class EnvoyRegistryTest {
   public void storesZoneOnAttach() throws StatusException, ZoneNotAuthorizedException {
     final EnvoySummary envoySummary = EnvoySummary.newBuilder()
         .setResourceId("hostname:test-host")
-        .putLabels("discovered.os", "linux")
+        .putLabels("discovered_os", "linux")
         .setZone("z-1")
         .build();
 
@@ -192,7 +192,7 @@ public class EnvoyRegistryTest {
             "t-1:hostname:test-host",
             new AttachEvent()
                 .setResourceId("hostname:test-host")
-                .setLabels(Collections.singletonMap("agent.discovered.os", "linux"))
+                .setLabels(Collections.singletonMap("agent_discovered_os", "linux"))
                 .setEnvoyId("e-1")
                 .setTenantId("t-1")
                 .setEnvoyAddress("localhost")

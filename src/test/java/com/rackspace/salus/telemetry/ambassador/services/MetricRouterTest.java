@@ -26,6 +26,8 @@ import static org.mockito.Mockito.when;
 import com.rackspace.salus.services.TelemetryEdge;
 import com.rackspace.salus.telemetry.ambassador.config.AvroConfig;
 import com.rackspace.salus.telemetry.messaging.KafkaMessageType;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -36,6 +38,7 @@ import org.junit.runner.RunWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
 import org.springframework.core.io.ClassPathResource;
@@ -48,7 +51,12 @@ public class MetricRouterTest {
 
     @Configuration
     @Import({MetricRouter.class, AvroConfig.class})
-    static class TestConfig { }
+    static class TestConfig {
+        @Bean
+        MeterRegistry meterRegistry() {
+            return new SimpleMeterRegistry();
+        }
+    }
 
     @MockBean
     KafkaEgress kafkaEgress;
@@ -63,7 +71,7 @@ public class MetricRouterTest {
     MetricRouter metricRouter;
 
     @Test
-    public void testRouteMetric() {
+    public void testRouteMetric() throws IOException {
 
         Map<String, String> envoyLabels = new HashMap<>();
         envoyLabels.put("hostname", "host1");
@@ -92,7 +100,7 @@ public class MetricRouterTest {
         verify(resourceLabelsService).getResourceLabels("t1", "r-1");
         verify(envoyRegistry).getResourceId("envoy-1");
         verify(kafkaEgress).send("t1", KafkaMessageType.METRIC,
-            "{\"timestamp\":\"2018-10-08T20:30:13.123Z\",\"accountType\":\"RCN\",\"account\":\"t1\",\"device\":\"r-1\",\"deviceLabel\":\"\",\"deviceMetadata\":{\"hostname\":\"host1\",\"os\":\"linux\"},\"monitoringSystem\":\"SALUS\",\"systemMetadata\":{\"envoyId\":\"envoy-1\"},\"collectionName\":\"cpu\",\"collectionLabel\":\"\",\"collectionTarget\":\"\",\"collectionMetadata\":{\"cpu\":\"cpu1\"},\"ivalues\":{},\"fvalues\":{\"usage\":1.45},\"svalues\":{\"status\":\"enabled\"},\"units\":{}}");
+            readContent("/MetricRouterTest/testRouteMetric.json"));
 
         verifyNoMoreInteractions(kafkaEgress, envoyRegistry);
     }

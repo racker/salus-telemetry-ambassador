@@ -31,9 +31,10 @@ import com.rackspace.salus.common.messaging.KafkaTopicProperties;
 import com.rackspace.salus.resource_management.web.client.ResourceApi;
 import com.rackspace.salus.telemetry.messaging.ResourceEvent;
 import com.rackspace.salus.telemetry.model.Resource;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.net.UnknownHostException;
 import java.util.Map;
-import org.junit.After;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -72,6 +73,11 @@ public class ResourceLabelsServiceTest {
     TaskExecutor taskExecutor() {
       return new SyncTaskExecutor();
     }
+
+    @Bean
+    MeterRegistry meterRegistry() {
+      return new SimpleMeterRegistry();
+    }
   }
 
   @Autowired
@@ -87,11 +93,6 @@ public class ResourceLabelsServiceTest {
   public void testKafkaFields() throws UnknownHostException {
     assertThat(resourceLabelsService.getGroupId(), startsWith(ResourceLabelsService.GROUP_ID_PREFIX));
     assertThat(resourceLabelsService.getTopic(), equalTo(kafkaTopicProperties.getResources()));
-  }
-
-  @After
-  public void tearDown() throws Exception {
-    verifyNoMoreInteractions(resourceApi);
   }
 
   @Test
@@ -112,6 +113,8 @@ public class ResourceLabelsServiceTest {
     assertThat(labels, equalTo(expectedLabels));
 
     verify(resourceApi).getByResourceId("t-1", "r-1");
+
+    verifyNoMoreInteractions(resourceApi);
   }
 
   @Test
@@ -133,12 +136,12 @@ public class ResourceLabelsServiceTest {
     assertThat(labels, equalTo(expectedLabels));
 
     verify(resourceApi, times(2)).getByResourceId("t-1", "r-1");
+
+    verifyNoMoreInteractions(resourceApi);
   }
 
   @Test
   public void test_trackResource_failAllQuery() {
-    final Map<String, String> expectedLabels = singletonMap("agent_discovered_os", "linux");
-
     when(resourceApi.getByResourceId("t-1", "r-1"))
         .thenThrow(ResourceAccessException.class)
         .thenThrow(ResourceAccessException.class);
@@ -152,6 +155,8 @@ public class ResourceLabelsServiceTest {
     assertThat(labels.size(), equalTo(0));
 
     verify(resourceApi, times(2)).getByResourceId("t-1", "r-1");
+
+    verifyNoMoreInteractions(resourceApi);
   }
 
   @Test
@@ -179,6 +184,8 @@ public class ResourceLabelsServiceTest {
     assertThat(afterRelease, nullValue());
 
     verify(resourceApi).getByResourceId("t-1", "r-1");
+
+    verifyNoMoreInteractions(resourceApi);
   }
 
   @Test
@@ -197,7 +204,7 @@ public class ResourceLabelsServiceTest {
         .setResourceId("r-1")
     );
 
-    // and tearDown will verify resourceApi was never called
+    verifyNoMoreInteractions(resourceApi);
   }
 
   @Test
@@ -224,5 +231,7 @@ public class ResourceLabelsServiceTest {
     assertThat(postLabels, equalTo(singletonMap("env", "post")));
 
     verify(resourceApi, times(2)).getByResourceId("t-1", "r-1");
+
+    verifyNoMoreInteractions(resourceApi);
   }
 }

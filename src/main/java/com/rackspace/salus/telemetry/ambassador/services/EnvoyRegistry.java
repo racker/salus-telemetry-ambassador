@@ -81,8 +81,8 @@ public class EnvoyRegistry {
     private final EnvoyLabelManagement envoyLabelManagement;
     private final EnvoyLeaseTracking envoyLeaseTracking;
     private final EnvoyResourceManagement envoyResourceManagement;
-  private final ResourceLabelsService resourceLabelsService;
-  private final ZoneAuthorizer zoneAuthorizer;
+    private final ResourceLabelsService resourceLabelsService;
+    private final ZoneAuthorizer zoneAuthorizer;
     private final ZoneStorage zoneStorage;
     private final JsonFormat.Printer jsonPrinter;
     private final KafkaTemplate<String,Object> kafkaTemplate;

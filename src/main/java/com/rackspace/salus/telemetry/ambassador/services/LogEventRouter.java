@@ -31,6 +31,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+/**
+ * This service routes to Kafka the "log events" that originate from Filebeat running as an agent
+ * of a tenant's Envoy.
+ */
 @Service
 @Slf4j
 public class LogEventRouter {
