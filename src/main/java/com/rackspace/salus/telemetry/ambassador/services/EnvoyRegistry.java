@@ -380,7 +380,7 @@ public class EnvoyRegistry {
     }
 
     void createTestingEntry(String envoyId) {
-      envoys.put(envoyId, new EnvoyEntry(null, null,null));
+      envoys.put(envoyId, new EnvoyEntry(null, null, null));
     }
 
     /**
