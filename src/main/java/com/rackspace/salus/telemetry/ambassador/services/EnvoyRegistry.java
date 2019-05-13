@@ -180,6 +180,9 @@ public class EnvoyRegistry {
             unauthorizedZoneCounter.increment();
             log.warn("Envoy attachment from remoteAddr={} is unauthorized: {}", remoteAddr, e.getMessage());
             throw new StatusException(Status.INVALID_ARGUMENT.withDescription(e.getMessage()));
+        } catch (IllegalArgumentException e) {
+            log.debug("Envoy attachment from remoteAddr={} specified invalid zone: {}", remoteAddr, e.getMessage());
+            throw new StatusException(Status.INVALID_ARGUMENT.withDescription(e.getMessage()));
         }
 
         final Map<String, String> envoyLabels = processEnvoyLabels(envoySummary);
