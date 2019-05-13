@@ -32,14 +32,13 @@ public class ZoneAuthorizerTest {
   @Test
   public void testNonPublic() throws ZoneNotAuthorizedException {
     AmbassadorProperties properties = new AmbassadorProperties();
-    properties.setPublicZonePrefix("public/");
 
     final ZoneAuthorizer authorizer = new ZoneAuthorizer(properties);
 
     final ResolvedZone zone = authorizer.authorize("any tenant", "notPublic");
 
     assertThat(zone, notNullValue());
-    assertThat(zone.getId(), equalTo("notPublic"));
+    assertThat(zone.getName(), equalTo("notPublic"));
     assertThat(zone.getTenantId(), equalTo("any tenant"));
     assertThat(zone.isPublicZone(), equalTo(false));
   }
@@ -47,7 +46,6 @@ public class ZoneAuthorizerTest {
   @Test(expected = ZoneNotAuthorizedException.class)
   public void testPublicNotAuthorized_noneConfigured() throws ZoneNotAuthorizedException {
     AmbassadorProperties properties = new AmbassadorProperties();
-    properties.setPublicZonePrefix("public/");
 
     final ZoneAuthorizer authorizer = new ZoneAuthorizer(properties);
 
@@ -58,7 +56,6 @@ public class ZoneAuthorizerTest {
   @Test(expected = ZoneNotAuthorizedException.class)
   public void testPublicNotAuthorized_noMatch() throws ZoneNotAuthorizedException {
     AmbassadorProperties properties = new AmbassadorProperties();
-    properties.setPublicZonePrefix("public/");
     properties.setPublicZoneTenants(Collections.singletonList("admin-tenant"));
 
     final ZoneAuthorizer authorizer = new ZoneAuthorizer(properties);
@@ -70,7 +67,6 @@ public class ZoneAuthorizerTest {
   @Test
   public void testPublicAuthorized() throws ZoneNotAuthorizedException {
     AmbassadorProperties properties = new AmbassadorProperties();
-    properties.setPublicZonePrefix("public/");
     properties.setPublicZoneTenants(Collections.singletonList("admin-tenant"));
 
     final ZoneAuthorizer authorizer = new ZoneAuthorizer(properties);
@@ -78,7 +74,7 @@ public class ZoneAuthorizerTest {
     final ResolvedZone zone = authorizer.authorize("admin-tenant", "public/us-east");
 
     assertThat(zone, notNullValue());
-    assertThat(zone.getId(), equalTo("public/us-east"));
+    assertThat(zone.getName(), equalTo("public/us-east"));
     assertThat(zone.isPublicZone(), equalTo(true));
   }
 

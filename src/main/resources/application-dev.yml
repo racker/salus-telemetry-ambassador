@@ -8,7 +8,6 @@ logging:
 ambassador:
   public-zone-tenants:
     - aaaaaa
-  public-zone-prefix: "public/"
 services:
   monitor-management-url: http://localhost:8089
   resource-management-url: http://localhost:8085
