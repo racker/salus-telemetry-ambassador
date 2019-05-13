@@ -198,10 +198,6 @@
                     <arguments>--logging.level.com.rackspace.salus=debug</arguments>
                 </configuration>
             </plugin>
-            <plugin>
-                <groupId>pl.project13.maven</groupId>
-                <artifactId>git-commit-id-plugin</artifactId>
-            </plugin>
 
             <plugin>
                 <groupId>com.google.cloud.tools</groupId>
