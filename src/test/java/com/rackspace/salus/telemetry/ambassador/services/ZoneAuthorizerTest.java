@@ -16,10 +16,12 @@
 
 package com.rackspace.salus.telemetry.ambassador.services;
 
-import static org.hamcrest.Matchers.*;
+import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.notNullValue;
+import static org.hamcrest.Matchers.nullValue;
 import static org.junit.Assert.assertThat;
-import static org.mockito.Mockito.when;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.when;
 
 import com.rackspace.salus.monitor_management.web.client.ZoneApi;
 import com.rackspace.salus.monitor_management.web.model.ZoneDTO;
@@ -27,7 +29,6 @@ import com.rackspace.salus.telemetry.ambassador.config.AmbassadorProperties;
 import com.rackspace.salus.telemetry.ambassador.types.ZoneNotAuthorizedException;
 import com.rackspace.salus.telemetry.etcd.types.ResolvedZone;
 import java.util.Collections;
-
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.springframework.boot.test.mock.mockito.MockBean;
@@ -106,7 +107,6 @@ public class ZoneAuthorizerTest {
   @Test(expected = IllegalArgumentException.class)
   public void testPublicZoneDoesntExist() throws ZoneNotAuthorizedException {
     AmbassadorProperties properties = new AmbassadorProperties();
-    properties.setPublicZonePrefix("public/");
     properties.setPublicZoneTenants(Collections.singletonList("admin-tenant"));
 
     when(zoneApi.getAvailableZones(anyString())).thenReturn(Collections.emptyList());
