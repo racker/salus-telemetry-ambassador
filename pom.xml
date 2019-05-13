@@ -46,6 +46,10 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
+        <dependency>
+            <groupId>org.springframework.retry</groupId>
+            <artifactId>spring-retry</artifactId>
+        </dependency>
 
         <dependency>
             <groupId>com.rackspace.salus</groupId>
@@ -87,6 +91,18 @@
         <dependency>
             <groupId>com.rackspace.salus</groupId>
             <artifactId>salus-telemetry-monitor-management</artifactId>
+            <version>0.0.1-SNAPSHOT</version>
+            <classifier>client</classifier>
+            <exclusions>
+                <exclusion>
+                    <groupId>*</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>com.rackspace.salus</groupId>
+            <artifactId>salus-telemetry-resource-management</artifactId>
             <version>0.0.1-SNAPSHOT</version>
             <classifier>client</classifier>
             <exclusions>
@@ -169,6 +185,13 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>build-info</goal>
+                        </goals>
+                    </execution>
+                </executions>
 
                 <configuration>
                     <workingDirectory>../dev</workingDirectory>

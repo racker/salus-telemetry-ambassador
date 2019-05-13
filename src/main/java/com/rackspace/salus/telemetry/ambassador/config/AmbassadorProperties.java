@@ -20,7 +20,6 @@ package com.rackspace.salus.telemetry.ambassador.config;
 
 import java.util.Collections;
 import java.util.List;
-import javax.validation.constraints.NotEmpty;
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
@@ -48,13 +47,12 @@ public class AmbassadorProperties {
     long envoyLeaseSec = 30;
 
     /**
-     * When this prefix is present on a zone advertised by an Envoy the it will be considered
-     * a public zone if the Envoy's tenant is in 'publicZoneTenants'
-     */
-    @NotEmpty
-    String publicZonePrefix = "public/";
-    /**
      * Only Envoys of these tenants are allowed to advertise a zone with prefixed with 'publicZonePrefix'
      */
     List<String> publicZoneTenants;
+
+    /**
+     * When calling APIs of other microservices, this will be the max attempts retried
+     */
+    int maxApiRetryAttempts = 10;
 }

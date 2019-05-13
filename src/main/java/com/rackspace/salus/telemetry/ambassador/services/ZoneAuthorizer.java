@@ -59,10 +59,10 @@ public class ZoneAuthorizer {
 
     log.debug(
         "Evaluating zone={} attached by tenant={} against publicZonePrefix={}",
-        zone, tenantId, properties.getPublicZonePrefix()
+        zone, tenantId, ResolvedZone.PUBLIC_PREFIX
     );
 
-    if (zone.startsWith(properties.getPublicZonePrefix())) {
+    if (zone.startsWith(ResolvedZone.PUBLIC_PREFIX)) {
       if (properties.getPublicZoneTenants() == null || !properties.getPublicZoneTenants()
           .contains(tenantId)) {
         throw new ZoneNotAuthorizedException(tenantId, zone);

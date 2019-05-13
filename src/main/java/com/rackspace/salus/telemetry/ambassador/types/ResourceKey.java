@@ -14,19 +14,12 @@
  * limitations under the License.
  */
 
-package com.rackspace.salus.telemetry.ambassador.config;
+package com.rackspace.salus.telemetry.ambassador.types;
 
-import javax.validation.constraints.NotEmpty;
 import lombok.Data;
-import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.stereotype.Component;
 
-@ConfigurationProperties("services")
-@Component
 @Data
-public class ServicesProperties {
-  @NotEmpty
-  String monitorManagementUrl;
-  @NotEmpty
-  String resourceManagementUrl;
+public class ResourceKey {
+  final String tenantId;
+  final String resourceId;
 }

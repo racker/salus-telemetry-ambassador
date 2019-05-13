@@ -25,30 +25,37 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.rackspace.salus.services.TelemetryEdge.LogEvent;
 import com.rackspace.salus.telemetry.messaging.KafkaMessageType;
 import java.io.IOException;
+import java.util.Collections;
 import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+/**
+ * This service routes to Kafka the "log events" that originate from Filebeat running as an agent
+ * of a tenant's Envoy.
+ */
 @Service
 @Slf4j
 public class LogEventRouter {
 
     private final EnvoyRegistry envoyRegistry;
+    private final ResourceLabelsService resourceLabelsService;
     private final ObjectMapper objectMapper;
     private final JsonNodeFactory nodeFactory;
     private final KafkaEgress kafkaEgress;
 
     @Autowired
-    public LogEventRouter(EnvoyRegistry envoyRegistry, ObjectMapper objectMapper, KafkaEgress kafkaEgress) {
+    public LogEventRouter(EnvoyRegistry envoyRegistry, ResourceLabelsService resourceLabelsService,
+                          ObjectMapper objectMapper, KafkaEgress kafkaEgress) {
         this.envoyRegistry = envoyRegistry;
+        this.resourceLabelsService = resourceLabelsService;
         this.objectMapper = objectMapper;
         nodeFactory = objectMapper.getNodeFactory();
         this.kafkaEgress = kafkaEgress;
     }
 
     public void route(String tenantId, String envoyId, LogEvent request) {
-        final Map<String, String> labels = envoyRegistry.getEnvoyLabels(envoyId);
 
         try {
             final JsonNode event = objectMapper.readTree(request.getJsonContent());
@@ -62,11 +69,22 @@ public class LogEventRouter {
 
                 metadataNode.set("@tenant", nodeFactory.textNode(tenantId));
 
-                final ObjectNode envoyLabels = nodeFactory.objectNode();
+                final String resourceId = envoyRegistry.getResourceId(envoyId);
+
+                Map<String, String> labels = resourceLabelsService.getResourceLabels(tenantId, resourceId);
+                if (labels == null) {
+                    log.warn(
+                        "No resource labels are being tracked for tenant={} resource={}",
+                        tenantId, resourceId
+                    );
+                    labels = Collections.emptyMap();
+                }
+
+                final ObjectNode resourceLabelsNode = nodeFactory.objectNode();
                 labels.forEach((name, value) -> {
-                    envoyLabels.set(name, nodeFactory.textNode(value));
+                    resourceLabelsNode.set(name, nodeFactory.textNode(value));
                 });
-                metadataNode.set("@envoyLabels", envoyLabels);
+                metadataNode.set("@resourceLabels", resourceLabelsNode);
 
                 final String enrichedJson = objectMapper.writeValueAsString(eventObj);
 

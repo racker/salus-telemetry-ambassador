@@ -72,7 +72,7 @@ public class ConfigInstructionsBuilder {
   }
 
   private boolean isRemoteMonitor(BoundMonitorDTO boundMonitor) {
-    return StringUtils.hasText(boundMonitor.getZoneId());
+    return StringUtils.hasText(boundMonitor.getZoneName());
   }
 
 

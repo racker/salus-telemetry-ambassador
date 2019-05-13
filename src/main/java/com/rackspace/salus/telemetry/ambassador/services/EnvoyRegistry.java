@@ -18,6 +18,7 @@ package com.rackspace.salus.telemetry.ambassador.services;
 
 import static com.rackspace.salus.common.messaging.KafkaMessageKeyBuilder.buildMessageKey;
 import static com.rackspace.salus.telemetry.model.LabelNamespaces.applyNamespace;
+import static java.util.Collections.emptyList;
 
 import com.google.common.hash.HashCode;
 import com.google.common.hash.HashFunction;
@@ -30,6 +31,7 @@ import com.rackspace.salus.services.TelemetryEdge;
 import com.rackspace.salus.services.TelemetryEdge.EnvoyInstruction;
 import com.rackspace.salus.services.TelemetryEdge.EnvoySummary;
 import com.rackspace.salus.telemetry.ambassador.config.AmbassadorProperties;
+import com.rackspace.salus.telemetry.ambassador.types.ResourceKey;
 import com.rackspace.salus.telemetry.ambassador.types.ZoneNotAuthorizedException;
 import com.rackspace.salus.telemetry.etcd.services.EnvoyLabelManagement;
 import com.rackspace.salus.telemetry.etcd.services.EnvoyLeaseTracking;
@@ -50,7 +52,6 @@ import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -80,6 +81,7 @@ public class EnvoyRegistry {
     private final EnvoyLabelManagement envoyLabelManagement;
     private final EnvoyLeaseTracking envoyLeaseTracking;
     private final EnvoyResourceManagement envoyResourceManagement;
+    private final ResourceLabelsService resourceLabelsService;
     private final ZoneAuthorizer zoneAuthorizer;
     private final ZoneStorage zoneStorage;
     private final JsonFormat.Printer jsonPrinter;
@@ -90,7 +92,7 @@ public class EnvoyRegistry {
     @Data
     static class EnvoyEntry {
         final StreamObserver<TelemetryEdge.EnvoyInstruction> instructionStream;
-        final Map<String,String> labels;
+        final String tenantId;
         final String resourceId;
 
       /**
@@ -117,6 +119,10 @@ public class EnvoyRegistry {
        */
       final UUID monitorId;
       /**
+       * The tenant owning the resource. Needed to handle deletion of entries.
+       */
+      final String resourceTenantId;
+      /**
        * resourceId is needed to handle deletion of entries.
        */
       final String resourceId;
@@ -131,6 +137,7 @@ public class EnvoyRegistry {
                          EnvoyLabelManagement envoyLabelManagement,
                          EnvoyLeaseTracking envoyLeaseTracking,
                          EnvoyResourceManagement envoyResourceManagement,
+                         ResourceLabelsService resourceLabelsService,
                          ZoneAuthorizer zoneAuthorizer,
                          ZoneStorage zoneStorage,
                          JsonFormat.Printer jsonPrinter,
@@ -141,6 +148,7 @@ public class EnvoyRegistry {
         this.envoyLabelManagement = envoyLabelManagement;
         this.envoyLeaseTracking = envoyLeaseTracking;
         this.envoyResourceManagement = envoyResourceManagement;
+        this.resourceLabelsService = resourceLabelsService;
         this.zoneAuthorizer = zoneAuthorizer;
         this.zoneStorage = zoneStorage;
         this.jsonPrinter = jsonPrinter;
@@ -215,7 +223,7 @@ public class EnvoyRegistry {
 
             })
             .thenApply(leaseId -> {
-                envoys.put(envoyId, new EnvoyEntry(instructionStreamObserver, envoyLabels, resourceId));
+                envoys.put(envoyId, new EnvoyEntry(instructionStreamObserver, tenantId, resourceId));
                 return leaseId;
             })
             .thenCompose(leaseId -> registerInZone(envoyId, resourceId, zone, leaseId))
@@ -333,8 +341,9 @@ public class EnvoyRegistry {
     }
 
     public void remove(String instanceId) {
-        envoys.remove(instanceId);
-        envoyLeaseTracking.revoke(instanceId);
+      final EnvoyEntry entry = envoys.remove(instanceId);
+      envoyLeaseTracking.revoke(instanceId);
+      resourceLabelsService.releaseResource(entry.getTenantId(), entry.getResourceId());
     }
 
     private void processFailedSend(String instanceId, Exception e) {
@@ -345,11 +354,6 @@ public class EnvoyRegistry {
 
     public boolean contains(String envoyInstanceId) {
         return envoys.containsKey(envoyInstanceId);
-    }
-
-    public Map<String, String> getEnvoyLabels(String envoyInstanceId) {
-        final EnvoyEntry entry = envoys.get(envoyInstanceId);
-        return entry != null ? entry.labels : Collections.emptyMap();
     }
 
     public String getResourceId(String envoyInstanceId) {
@@ -400,6 +404,8 @@ public class EnvoyRegistry {
 
       final HashMap<OperationType, List<BoundMonitorDTO>> changes = new HashMap<>();
 
+      final Set<ResourceKey> resourcesToRetain = new HashSet<>();
+
       synchronized (entry.getBoundMonitors()) {
         final Map<String, BoundMonitorEntry> bindings = entry.getBoundMonitors();
         // This will be used to track monitors that got removed by starting with all, but
@@ -410,6 +416,7 @@ public class EnvoyRegistry {
 
           final String monitorId = BoundMonitorUtils.buildConfiguredMonitorId(boundMonitor);
           staleMonitorIds.remove(monitorId);
+          resourcesToRetain.add(buildResourceKey(boundMonitor));
 
           final BoundMonitorEntry prevEntry = bindings.get(monitorId);
 
@@ -420,7 +427,8 @@ public class EnvoyRegistry {
                 monitorId,
                 new BoundMonitorEntry(
                     hashRenderedContent(boundMonitor), boundMonitor.getAgentType(),
-                    boundMonitor.getMonitorId(), boundMonitor.getResourceId()
+                    boundMonitor.getMonitorId(),
+                    boundMonitor.getResourceTenant(), boundMonitor.getResourceId()
                 )
             );
           } else {
@@ -435,7 +443,8 @@ public class EnvoyRegistry {
                   monitorId,
                   new BoundMonitorEntry(
                       hashRenderedContent(boundMonitor), boundMonitor.getAgentType(),
-                      boundMonitor.getMonitorId(), boundMonitor.getResourceId()
+                      boundMonitor.getMonitorId(),
+                      boundMonitor.getResourceTenant(), boundMonitor.getResourceId()
                   )
               );
             }
@@ -450,7 +459,9 @@ public class EnvoyRegistry {
               new BoundMonitorDTO()
               .setAgentType(removed.agentType)
               .setMonitorId(removed.monitorId)
+              .setResourceTenant(removed.resourceTenantId)
               .setResourceId(removed.resourceId)
+              // rendered content is not used by envoy, but needs to be non-null for gRPC
               .setRenderedContent("")
           );
 
@@ -458,18 +469,47 @@ public class EnvoyRegistry {
 
       } // end of synchronized block
 
+      updateResourceLabelTracking(resourcesToRetain, changes);
+
       return changes;
     }
 
-  private static <K,V> List<V> getOrCreate(HashMap<K, List<V>> map, K key) {
-    return map.computeIfAbsent(key, operationType -> new ArrayList<>());
-  }
+    private void updateResourceLabelTracking(
+        Set<ResourceKey> resourcesToRetain,
+        HashMap<OperationType, List<BoundMonitorDTO>> changes) {
 
-  @SuppressWarnings("UnstableApiUsage")
-  private HashCode hashRenderedContent(BoundMonitorDTO boundMonitor) {
-    return boundMonitorHashFunction.hashString(boundMonitor.getRenderedContent(),
-        StandardCharsets.UTF_8
-    );
-  }
+      changes.getOrDefault(OperationType.CREATE, emptyList()).stream()
+          .map(EnvoyRegistry::buildResourceKey)
+          .distinct()
+          .forEach(resourceKey -> {
+            resourceLabelsService
+                .trackResource(resourceKey.getTenantId(), resourceKey.getResourceId()
+                );
+          });
+      changes.getOrDefault(OperationType.DELETE, emptyList()).stream()
+          .map(EnvoyRegistry::buildResourceKey)
+          .filter(resourceKey -> !resourcesToRetain.contains(resourceKey))
+          .distinct()
+          .forEach(resourceKey -> {
+            resourceLabelsService
+                .releaseResource(resourceKey.getTenantId(), resourceKey.getResourceId());
+          });
+    }
+
+    private static <K,V> List<V> getOrCreate(HashMap<K, List<V>> map, K key) {
+      return map.computeIfAbsent(key, operationType -> new ArrayList<>());
+    }
+
+    private static ResourceKey buildResourceKey(BoundMonitorDTO boundMonitorDTO) {
+      return new ResourceKey(
+          boundMonitorDTO.getResourceTenant(), boundMonitorDTO.getResourceId());
+    }
+
+    @SuppressWarnings("UnstableApiUsage")
+    private HashCode hashRenderedContent(BoundMonitorDTO boundMonitor) {
+      return boundMonitorHashFunction.hashString(boundMonitor.getRenderedContent(),
+          StandardCharsets.UTF_8
+      );
+    }
 
 }

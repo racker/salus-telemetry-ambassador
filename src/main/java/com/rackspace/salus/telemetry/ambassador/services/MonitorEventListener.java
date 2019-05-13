@@ -51,12 +51,14 @@ public class MonitorEventListener implements ConsumerSeekAware {
     this.monitorApi = monitorApi;
   }
 
+  @SuppressWarnings("unused") // used in SpEL
   public String getTopic() {
     return topic;
   }
 
+  @SuppressWarnings("unused") // used in SpEL
   public String getGroupId() throws UnknownHostException {
-    return "ambassador-"+InetAddress.getLocalHost().getHostAddress();
+    return "ambassador-monitors-"+InetAddress.getLocalHost().getHostAddress();
   }
 
   @KafkaListener(topics = "#{__listener.topic}", groupId = "#{__listener.groupId}")
