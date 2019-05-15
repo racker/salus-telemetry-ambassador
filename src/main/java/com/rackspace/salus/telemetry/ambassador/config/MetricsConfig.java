@@ -29,8 +29,7 @@ import org.springframework.context.annotation.Configuration;
 public class MetricsConfig {
   private final BuildProperties buildProperties;
 
-  @Autowired
-  public MetricsConfig(BuildProperties buildProperties) {
+  public MetricsConfig(@Autowired(required = false) BuildProperties buildProperties) {
     this.buildProperties = buildProperties;
   }
 
@@ -46,7 +45,7 @@ public class MetricsConfig {
       }
 
       registry.config().commonTags(
-          "app", buildProperties.getName(),
+          "app", buildProperties != null ? buildProperties.getName() : "salus-telemetry-ambassador",
           "host", ourHostname);
     };
   }
