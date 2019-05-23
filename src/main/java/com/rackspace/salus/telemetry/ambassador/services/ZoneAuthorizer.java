@@ -95,7 +95,7 @@ public class ZoneAuthorizer {
     }
     boolean found = zones.stream().anyMatch(z -> z.getName().equals(zone));
 
-    log.error("Found {} zones for tenant", zoneApi.getAvailableZones(tenantId).size());
+    log.debug("Found {} zones for tenant", zoneApi.getAvailableZones(tenantId).size());
     if (!found) throw new IllegalArgumentException("Provided zone does not exist: " + zone);
   }
 }
