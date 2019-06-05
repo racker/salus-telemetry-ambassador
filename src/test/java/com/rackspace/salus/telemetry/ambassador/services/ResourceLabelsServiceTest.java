@@ -29,8 +29,8 @@ import static org.mockito.Mockito.when;
 
 import com.rackspace.salus.common.messaging.KafkaTopicProperties;
 import com.rackspace.salus.resource_management.web.client.ResourceApi;
+import com.rackspace.salus.resource_management.web.model.ResourceDTO;
 import com.rackspace.salus.telemetry.messaging.ResourceEvent;
-import com.rackspace.salus.telemetry.model.Resource;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.net.UnknownHostException;
@@ -101,7 +101,7 @@ public class ResourceLabelsServiceTest {
 
     when(resourceApi.getByResourceId("t-1", "r-1"))
         .thenReturn(
-            new Resource()
+            new ResourceDTO()
             .setLabels(expectedLabels)
         );
 
@@ -124,7 +124,7 @@ public class ResourceLabelsServiceTest {
     when(resourceApi.getByResourceId("t-1", "r-1"))
         .thenThrow(ResourceAccessException.class)
         .thenReturn(
-            new Resource()
+            new ResourceDTO()
                 .setLabels(expectedLabels)
         );
 
@@ -165,7 +165,7 @@ public class ResourceLabelsServiceTest {
 
     when(resourceApi.getByResourceId("t-1", "r-1"))
         .thenReturn(
-            new Resource()
+            new ResourceDTO()
                 .setLabels(expectedLabels)
         );
 
@@ -211,8 +211,8 @@ public class ResourceLabelsServiceTest {
   public void test_handResourceEvent_tracking() {
 
     when(resourceApi.getByResourceId("t-1", "r-1"))
-        .thenReturn(new Resource().setLabels(singletonMap("env", "pre")))
-        .thenReturn(new Resource().setLabels(singletonMap("env", "post")));
+        .thenReturn(new ResourceDTO().setLabels(singletonMap("env", "pre")))
+        .thenReturn(new ResourceDTO().setLabels(singletonMap("env", "post")));
 
     resourceLabelsService.trackResource("t-1", "r-1");
 

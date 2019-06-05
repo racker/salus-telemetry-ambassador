@@ -18,9 +18,9 @@ package com.rackspace.salus.telemetry.ambassador.services;
 
 import com.rackspace.salus.common.messaging.KafkaTopicProperties;
 import com.rackspace.salus.resource_management.web.client.ResourceApi;
+import com.rackspace.salus.resource_management.web.model.ResourceDTO;
 import com.rackspace.salus.telemetry.ambassador.types.ResourceKey;
 import com.rackspace.salus.telemetry.messaging.ResourceEvent;
-import com.rackspace.salus.telemetry.model.Resource;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.net.InetAddress;
@@ -129,7 +129,7 @@ public class ResourceLabelsService implements ConsumerSeekAware {
             log.debug("Trying to query for tenantId={} resourceId={} try={}",
                 tenantId, resourceId, retryContext.getRetryCount());
 
-            final Resource resource = resourceApi.getByResourceId(tenantId, resourceId);
+            final ResourceDTO resource = resourceApi.getByResourceId(tenantId, resourceId);
 
             return resource.getLabels();
           },
