@@ -101,10 +101,18 @@ public class ConfigInstructionsBuilderTest {
     assertThat(telegrafConfig.getOperations(0).getId(), equalTo("00000000-0000-0001-0000-000000000000_r-1"));
     assertThat(telegrafConfig.getOperations(0).getType(), equalTo(Type.CREATE));
     assertThat(telegrafConfig.getOperations(0).getContent(), equalTo("content1"));
+    assertThat(telegrafConfig.getOperations(0).getExtraLabelsMap(), allOf(
+        hasEntry(BoundMonitorUtils.LABEL_MONITOR_ID, "00000000-0000-0001-0000-000000000000")
+        )
+    );
 
     assertThat(telegrafConfig.getOperations(1).getId(), equalTo("00000000-0000-0002-0000-000000000000_r-1"));
     assertThat(telegrafConfig.getOperations(1).getType(), equalTo(Type.MODIFY));
     assertThat(telegrafConfig.getOperations(1).getContent(), equalTo("content2"));
+    assertThat(telegrafConfig.getOperations(1).getExtraLabelsMap(), allOf(
+        hasEntry(BoundMonitorUtils.LABEL_MONITOR_ID, "00000000-0000-0002-0000-000000000000")
+        )
+    );
 
     assertThat(telegrafConfig.getOperations(2).getId(), equalTo("00000000-0000-0003-0000-000000000000_r-1"));
     assertThat(telegrafConfig.getOperations(2).getType(), equalTo(Type.REMOVE));
@@ -115,7 +123,8 @@ public class ConfigInstructionsBuilderTest {
     assertThat(telegrafConfig.getOperations(3).getContent(), equalTo("content5"));
     assertThat(telegrafConfig.getOperations(3).getExtraLabelsMap(), allOf(
         hasEntry(BoundMonitorUtils.LABEL_TARGET_TENANT, "t-1"),
-        hasEntry(BoundMonitorUtils.LABEL_RESOURCE, "r-2")
+        hasEntry(BoundMonitorUtils.LABEL_RESOURCE, "r-2"),
+        hasEntry(BoundMonitorUtils.LABEL_MONITOR_ID, "00000000-0000-0005-0000-000000000000")
         )
     );
 
@@ -126,5 +135,9 @@ public class ConfigInstructionsBuilderTest {
     assertThat(filebeatConfig.getOperations(0).getId(), equalTo("00000000-0000-0004-0000-000000000000_r-1"));
     assertThat(filebeatConfig.getOperations(0).getType(), equalTo(Type.CREATE));
     assertThat(filebeatConfig.getOperations(0).getContent(), equalTo("content4"));
+    assertThat(filebeatConfig.getOperations(0).getExtraLabelsMap(), allOf(
+        hasEntry(BoundMonitorUtils.LABEL_MONITOR_ID, "00000000-0000-0004-0000-000000000000")
+        )
+    );
   }
 }

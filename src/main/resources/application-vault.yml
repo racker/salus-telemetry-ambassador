@@ -1,0 +1,6 @@
+vault:
+  uri: http://localhost:8200
+  authentication: APPROLE
+#  app-role:
+#    role-id: or set env VAULT_APP_ROLE_ROLE_ID
+#    secret-id: or set set env VAULT_APP_ROLE_SECRET_ID

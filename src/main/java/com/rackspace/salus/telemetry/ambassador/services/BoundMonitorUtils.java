@@ -22,6 +22,7 @@ public class BoundMonitorUtils {
 
   public static final String LABEL_TARGET_TENANT = "target_tenant";
   public static final String LABEL_RESOURCE = "resource_id";
+  public static final String LABEL_MONITOR_ID = "monitor_id";
 
   public static String buildConfiguredMonitorId(BoundMonitorDTO boundMonitor) {
     // don't need to qualify resource ID by resource tenant since monitor ID is already distinct
