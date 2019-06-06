@@ -63,6 +63,8 @@ public class ConfigInstructionsBuilder {
         .setType(convertOpType(operationType))
         .setContent(boundMonitor.getRenderedContent());
 
+    opBuilder.putExtraLabels(BoundMonitorUtils.LABEL_MONITOR_ID, boundMonitor.getMonitorId().toString());
+
     if (isRemoteMonitor(boundMonitor)) {
       opBuilder.putExtraLabels(BoundMonitorUtils.LABEL_TARGET_TENANT, boundMonitor.getResourceTenant());
       opBuilder.putExtraLabels(BoundMonitorUtils.LABEL_RESOURCE, boundMonitor.getResourceId());
