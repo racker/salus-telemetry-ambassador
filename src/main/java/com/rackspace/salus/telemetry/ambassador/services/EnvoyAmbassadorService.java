@@ -66,11 +66,9 @@ public class EnvoyAmbassadorService extends TelemetryAmbassadorGrpc.TelemetryAmb
 
     @Override
     public void attachEnvoy(TelemetryEdge.EnvoySummary request, StreamObserver<TelemetryEdge.EnvoyInstruction> responseObserver) {
-        log.info("Envoy is attaching");
         final SocketAddress remoteAddr = GrpcContextDetails.getCallerRemoteAddress();
         final String envoyId = GrpcContextDetails.getCallerEnvoyId();
 
-        log.info("Found envoy id {}", envoyId);
         registerCancelHandler(envoyId, remoteAddr, responseObserver);
         envoyAttach.increment();
         try {
