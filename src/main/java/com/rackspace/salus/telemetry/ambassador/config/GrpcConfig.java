@@ -59,15 +59,7 @@ public class GrpcConfig extends GRpcServerBuilderConfigurer {
     public void configure(ServerBuilder<?> serverBuilder) {
         final NettyServerBuilder nettyServerBuilder = (NettyServerBuilder) serverBuilder;
 
-        try {
-            if (!appProperties.isDisableTls()) {
-                nettyServerBuilder
-                        .sslContext(buildSslContext());
-            }
-
-        } catch (SSLException e) {
-            throw new RuntimeException("Failed to initialize SSL context");
-        }
+        
     }
 
     private SslContext buildSslContext() throws SSLException {
