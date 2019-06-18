@@ -59,7 +59,7 @@ public class GrpcConfig extends GRpcServerBuilderConfigurer {
     public void configure(ServerBuilder<?> serverBuilder) {
         final NettyServerBuilder nettyServerBuilder = (NettyServerBuilder) serverBuilder;
 
-        
+
     }
 
     private SslContext buildSslContext() throws SSLException {
