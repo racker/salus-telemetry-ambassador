@@ -1,19 +1,17 @@
 /*
- *    Copyright 2018 Rackspace US, Inc.
+ * Copyright 2019 Rackspace US, Inc.
  *
- *    Licensed under the Apache License, Version 2.0 (the "License");
- *    you may not use this file except in compliance with the License.
- *    You may obtain a copy of the License at
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- *        http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
- *    Unless required by applicable law or agreed to in writing, software
- *    distributed under the License is distributed on an "AS IS" BASIS,
- *    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *    See the License for the specific language governing permissions and
- *    limitations under the License.
- *
- *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 package com.rackspace.salus.telemetry.ambassador.services;
@@ -99,7 +97,7 @@ public class MetricRouterTest {
 
         verify(resourceLabelsService).getResourceLabels("t1", "r-1");
         verify(envoyRegistry).getResourceId("envoy-1");
-        verify(kafkaEgress).send("t1", KafkaMessageType.METRIC,
+        verify(kafkaEgress).send("t1:r-1", KafkaMessageType.METRIC,
             readContent("/MetricRouterTest/testRouteMetric.json"));
 
         verifyNoMoreInteractions(kafkaEgress, envoyRegistry);
@@ -125,6 +123,7 @@ public class MetricRouterTest {
                     .setName("cpu")
                     .putTags("cpu", "cpu1")
                     .putTags(BoundMonitorUtils.LABEL_TARGET_TENANT, "t-some-other")
+                    // simulate tenant's monitored resource "r-other"
                     .putTags(BoundMonitorUtils.LABEL_RESOURCE, "r-other")
                     .putFvalues("usage", 1.45)
                     .putSvalues("status", "enabled")
@@ -135,7 +134,7 @@ public class MetricRouterTest {
         metricRouter.route("t1", "envoy-1", postedMetric);
 
         verify(resourceLabelsService).getResourceLabels("t-some-other", "r-other");
-        verify(kafkaEgress).send("t-some-other", KafkaMessageType.METRIC,
+        verify(kafkaEgress).send("t-some-other:r-other", KafkaMessageType.METRIC,
             readContent("/MetricRouterTest/testRouteMetric_withTargetTenant.json"));
 
         verifyNoMoreInteractions(kafkaEgress, envoyRegistry);
