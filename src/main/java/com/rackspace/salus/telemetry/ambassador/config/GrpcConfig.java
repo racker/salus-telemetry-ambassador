@@ -64,6 +64,9 @@ public class GrpcConfig extends GRpcServerBuilderConfigurer {
                 nettyServerBuilder
                         .sslContext(buildSslContext());
             }
+            else {
+                log.warn("gRPC TLS is DISABLED -- only suitable for local development");
+            }
 
         } catch (SSLException e) {
             throw new RuntimeException("Failed to initialize SSL context");
@@ -84,6 +87,11 @@ public class GrpcConfig extends GRpcServerBuilderConfigurer {
     }
 
     private SslContextBuilder buildSslContextFromProvided() {
+        log.info("Loading certificates from provided files: certChain={}, key={}, trustCert={}",
+            appProperties.getCertChainPath(),
+            appProperties.getKeyPath(),
+            appProperties.getTrustCertPath());
+
         return SslContextBuilder.forServer(
             new File(appProperties.getCertChainPath()),
             new File(appProperties.getKeyPath()))
