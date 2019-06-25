@@ -55,6 +55,20 @@
             <groupId>com.rackspace.salus</groupId>
             <artifactId>salus-telemetry-etcd-adapter</artifactId>
             <version>0.1.0-SNAPSHOT</version>
+            <exclusions>
+                <!--
+                Let salus-telemetry-protocol dictate the gRPC version since Ambassador has
+                a direct use of gRPC.
+               -->
+                <exclusion>
+                    <artifactId>grpc-core</artifactId>
+                    <groupId>io.grpc</groupId>
+                </exclusion>
+                <exclusion>
+                    <artifactId>grpc-netty</artifactId>
+                    <groupId>io.grpc</groupId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <dependency>
@@ -75,7 +89,7 @@
         <dependency>
             <groupId>com.rackspace.salus</groupId>
             <artifactId>salus-telemetry-protocol</artifactId>
-            <version>0.1.1</version>
+            <version>0.2-SNAPSHOT</version>
         </dependency>
         <dependency>
             <groupId>com.rackspace.monplat</groupId>
@@ -122,8 +136,9 @@
             <!-- for grpc tls support -->
             <groupId>io.netty</groupId>
             <artifactId>netty-tcnative-boringssl-static</artifactId>
-            <version>2.0.18.Final</version>
+            <version>2.0.25.Final</version>
         </dependency>
+
         <dependency>
             <groupId>org.springframework.vault</groupId>
             <artifactId>spring-vault-core</artifactId>
@@ -134,6 +149,24 @@
             <artifactId>micrometer-core</artifactId>
         </dependency>
 
+        <dependency>
+            <groupId>com.google.cloud</groupId>
+            <artifactId>google-cloud-logging-logback</artifactId>
+            <version>0.96.0-alpha</version>
+            <exclusions>
+                <exclusion>
+                    <!--
+                    The shaded instance was registering
+                    io.grpc.netty.shaded.io.grpc.netty.NettyChannelProvider, which caused
+                    issues when our code tried to cast to io.grpc.netty.NettyChannelProvider.
+                    Excluding this didn't harm the google cloud logging since it was able to
+                    use the non-shaded instance.
+                    -->
+                    <artifactId>grpc-netty-shaded</artifactId>
+                    <groupId>io.grpc</groupId>
+                </exclusion>
+            </exclusions>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-configuration-processor</artifactId>

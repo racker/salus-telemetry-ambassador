@@ -1,0 +1,45 @@
+<!--
+  ~ Copyright 2019 Rackspace US, Inc.
+  ~
+  ~ Licensed under the Apache License, Version 2.0 (the "License");
+  ~ you may not use this file except in compliance with the License.
+  ~ You may obtain a copy of the License at
+  ~
+  ~     http://www.apache.org/licenses/LICENSE-2.0
+  ~
+  ~ Unless required by applicable law or agreed to in writing, software
+  ~ distributed under the License is distributed on an "AS IS" BASIS,
+  ~ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  ~ See the License for the specific language governing permissions and
+  ~ limitations under the License.
+  -->
+
+<configuration>
+  <include resource="org/springframework/boot/logging/logback/defaults.xml" />
+  <include resource="org/springframework/boot/logging/logback/console-appender.xml" />
+
+  <springProperty scope="context" name="APP_NAME" source="spring.application.name" defaultValue="salus-app" />
+
+  <appender name="GCP" class="com.google.cloud.logging.logback.LoggingAppender">
+    <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+      <level>DEBUG</level>
+    </filter>
+    <log>${APP_NAME}.log</log>
+    <flushLevel>WARN</flushLevel>
+  </appender>
+
+<!--  Console logging is active by default, but disable by activating no-console-logging profile -->
+  <springProfile name="!no-console-logging">
+    <root level="INFO">
+      <appender-ref ref="CONSOLE" />
+    </root>
+  </springProfile>
+
+<!--  Add option for GCP logging -->
+  <springProfile name="gcp-logging">
+    <root level="INFO">
+      <appender-ref ref="GCP" />
+    </root>
+  </springProfile>
+
+</configuration>
