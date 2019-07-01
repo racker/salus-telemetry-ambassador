@@ -145,7 +145,10 @@ public class EnvoyAmbassadorService extends TelemetryAmbassadorGrpc.TelemetryAmb
             responseObserver.onNext(TelemetryEdge.KeepAliveResponse.newBuilder().build());
             responseObserver.onCompleted();
         } else {
-            log.warn("Failed keep alive due to unknown envoyId={}", envoyId);
+            // Can happen just after ambassador restart when the envoy TCP connection is held
+            // open by the load balancer. The onError will trigger the Envoy to tear down
+            // connection and re-connect.
+            log.warn("Failed to process keep alive due to unknown envoyId={}", envoyId);
             responseObserver.onError(new StatusException(Status.INVALID_ARGUMENT));
         }
     }
