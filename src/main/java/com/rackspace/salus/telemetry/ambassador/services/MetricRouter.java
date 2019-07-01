@@ -140,8 +140,7 @@ public class MetricRouter {
             metricsRouted.increment();
             kafkaEgress.send(tenantId, KafkaMessageType.METRIC, out.toString(StandardCharsets.UTF_8.name()));
 
-        } catch (IOException e) {
-//        } catch (IOException|NullPointerException e) {
+        } catch (IOException|NullPointerException e) {
             log.warn("Failed to Avro encode avroMetric={} original={}", externalMetric, postedMetric, e);
             throw new RuntimeException("Failed to Avro encode metric", e);
         }
