@@ -23,8 +23,6 @@ import static java.util.Collections.emptyList;
 import com.google.common.hash.HashCode;
 import com.google.common.hash.HashFunction;
 import com.google.common.hash.Hashing;
-import com.google.protobuf.InvalidProtocolBufferException;
-import com.google.protobuf.util.JsonFormat;
 import com.rackspace.salus.common.messaging.KafkaTopicProperties;
 import com.rackspace.salus.monitor_management.web.model.BoundMonitorDTO;
 import com.rackspace.salus.services.TelemetryEdge;
@@ -33,7 +31,6 @@ import com.rackspace.salus.services.TelemetryEdge.EnvoySummary;
 import com.rackspace.salus.telemetry.ambassador.config.AmbassadorProperties;
 import com.rackspace.salus.telemetry.ambassador.types.ResourceKey;
 import com.rackspace.salus.telemetry.ambassador.types.ZoneNotAuthorizedException;
-import com.rackspace.salus.telemetry.etcd.services.EnvoyLabelManagement;
 import com.rackspace.salus.telemetry.etcd.services.EnvoyLeaseTracking;
 import com.rackspace.salus.telemetry.etcd.services.EnvoyResourceManagement;
 import com.rackspace.salus.telemetry.etcd.services.ZoneStorage;
@@ -78,14 +75,12 @@ public class EnvoyRegistry {
 
     private final AmbassadorProperties appProperties;
     private final KafkaTopicProperties kafkaTopics;
-    private final EnvoyLabelManagement envoyLabelManagement;
-    private final EnvoyLeaseTracking envoyLeaseTracking;
+  private final EnvoyLeaseTracking envoyLeaseTracking;
     private final EnvoyResourceManagement envoyResourceManagement;
     private final ResourceLabelsService resourceLabelsService;
     private final ZoneAuthorizer zoneAuthorizer;
     private final ZoneStorage zoneStorage;
-    private final JsonFormat.Printer jsonPrinter;
-    private final KafkaTemplate<String,Object> kafkaTemplate;
+  private final KafkaTemplate<String,Object> kafkaTemplate;
     private final Counter unauthorizedZoneCounter;
     private final HashFunction boundMonitorHashFunction;
 
@@ -93,6 +88,7 @@ public class EnvoyRegistry {
     static class EnvoyEntry {
         final StreamObserver<TelemetryEdge.EnvoyInstruction> instructionStream;
         final String tenantId;
+        final String envoyId;
         final String resourceId;
 
       /**
@@ -129,29 +125,26 @@ public class EnvoyRegistry {
     }
 
     private ConcurrentHashMap<String, EnvoyEntry> envoys = new ConcurrentHashMap<>();
+    private ConcurrentHashMap<String, EnvoyEntry> envoysByResourceId = new ConcurrentHashMap<>();
 
     @SuppressWarnings("SpringJavaInjectionPointsAutowiringInspection")
     @Autowired
     public EnvoyRegistry(AmbassadorProperties appProperties,
                          KafkaTopicProperties kafkaTopics,
-                         EnvoyLabelManagement envoyLabelManagement,
                          EnvoyLeaseTracking envoyLeaseTracking,
                          EnvoyResourceManagement envoyResourceManagement,
                          ResourceLabelsService resourceLabelsService,
                          ZoneAuthorizer zoneAuthorizer,
                          ZoneStorage zoneStorage,
-                         JsonFormat.Printer jsonPrinter,
                          KafkaTemplate<String, Object> kafkaTemplate,
                          MeterRegistry meterRegistry) {
         this.appProperties = appProperties;
         this.kafkaTopics = kafkaTopics;
-        this.envoyLabelManagement = envoyLabelManagement;
         this.envoyLeaseTracking = envoyLeaseTracking;
         this.envoyResourceManagement = envoyResourceManagement;
         this.resourceLabelsService = resourceLabelsService;
         this.zoneAuthorizer = zoneAuthorizer;
         this.zoneStorage = zoneStorage;
-        this.jsonPrinter = jsonPrinter;
         this.kafkaTemplate = kafkaTemplate;
         this.boundMonitorHashFunction = Hashing.adler32();
 
@@ -174,15 +167,19 @@ public class EnvoyRegistry {
                 throws StatusException {
 
         final ResolvedZone zone;
-        try {
+        if (StringUtils.hasText(envoySummary.getZone())) {
+          try {
             zone = zoneAuthorizer.authorize(tenantId, envoySummary.getZone());
-        } catch (ZoneNotAuthorizedException e) {
+          } catch (ZoneNotAuthorizedException e) {
             unauthorizedZoneCounter.increment();
             log.warn("Envoy attachment from remoteAddr={} is unauthorized: {}", remoteAddr, e.getMessage());
             throw new StatusException(Status.INVALID_ARGUMENT.withDescription(e.getMessage()));
-        } catch (IllegalArgumentException e) {
+          } catch (IllegalArgumentException e) {
             log.debug("Envoy attachment from remoteAddr={} specified invalid zone: {}", remoteAddr, e.getMessage());
             throw new StatusException(Status.INVALID_ARGUMENT.withDescription(e.getMessage()));
+          }
+        } else {
+          zone = null;
         }
 
         final Map<String, String> envoyLabels = processEnvoyLabels(envoySummary);
@@ -205,28 +202,16 @@ public class EnvoyRegistry {
             tenantId, envoyId, remoteAddr, resourceId, zone, envoyLabels, supportedAgentTypes);
 
         return envoyLeaseTracking.grant(envoyId)
-            .thenCompose(leaseId -> {
-
-                try {
-
-                    final String summaryAsJson = jsonPrinter.print(envoySummary);
-
-                    return envoyLabelManagement.registerAndSpreadEnvoy(
-                        tenantId, envoyId, summaryAsJson, leaseId,
-                        envoyLabels, supportedAgentTypes
-                    )
-                        .thenApply(o -> leaseId);
-
-                } catch (InvalidProtocolBufferException e) {
-                    throw new RuntimeException("Failed to spread envoy", e);
-                }
-
-            })
             .thenApply(leaseId -> {
-                envoys.put(envoyId, new EnvoyEntry(instructionStreamObserver, tenantId, resourceId));
-                return leaseId;
+              final EnvoyEntry entry = new EnvoyEntry(
+                  instructionStreamObserver, tenantId, envoyId, resourceId);
+              envoys.put(envoyId, entry);
+              envoysByResourceId.put(resourceId, entry);
+              return leaseId;
             })
-            .thenCompose(leaseId -> registerInZone(envoyId, resourceId, zone, leaseId))
+            .thenCompose(leaseId ->
+                // register in zone if not null or passes through otherwise
+                registerInZone(envoyId, resourceId, zone, leaseId))
             .thenCompose(leaseId ->
                 postAttachEvent(tenantId, envoyId, envoySummary, envoyLabels, remoteAddr)
                 .thenApply(sendResult -> {
@@ -241,14 +226,6 @@ public class EnvoyRegistry {
                         log.debug("Registered new envoy resource for presence monitoring for " +
                                 "tenant={}, envoyId={}, resourceId={}",
                             tenantId, envoyId, resourceId);
-                        return leaseId;
-                    })
-            )
-            .thenCompose(leaseId ->
-                envoyLabelManagement.pullAgentInstallsForEnvoy(tenantId, envoyId, leaseId, supportedAgentTypes, envoyLabels)
-                    .thenApply(agentInstallCount -> {
-                        log.debug("Pulled agent installs count={} for tenant={}, envoy={}",
-                            agentInstallCount, tenantId, envoyId);
                         return leaseId;
                     })
             )
@@ -361,6 +338,14 @@ public class EnvoyRegistry {
         return entry != null ? entry.getResourceId() : null;
     }
 
+    public boolean containsEnvoyResource(String resourceId) {
+      return envoysByResourceId.containsKey(resourceId);
+    }
+
+    public String getEnvoyIdByResource(String resourceId) {
+      final EnvoyEntry entry = envoysByResourceId.get(resourceId);
+      return entry != null ? entry.getEnvoyId() : null;
+    }
 
     public void sendInstruction(String envoyInstanceId, TelemetryEdge.EnvoyInstruction instruction) {
         final EnvoyEntry envoyEntry = envoys.get(envoyInstanceId);
@@ -383,7 +368,7 @@ public class EnvoyRegistry {
     }
 
     void createTestingEntry(String envoyId) {
-      envoys.put(envoyId, new EnvoyEntry(null, null, null));
+      envoys.put(envoyId, new EnvoyEntry(null, null, null, null));
     }
 
     /**

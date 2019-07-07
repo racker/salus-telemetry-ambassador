@@ -12,3 +12,4 @@ ambassador:
 services:
   monitor-management-url: http://localhost:8089
   resource-management-url: http://localhost:8085
+  agent-catalog-management-url: http://localhost:8090

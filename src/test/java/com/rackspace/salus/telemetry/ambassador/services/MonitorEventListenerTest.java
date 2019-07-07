@@ -30,6 +30,7 @@ import static org.mockito.Mockito.when;
 import com.rackspace.salus.common.messaging.KafkaTopicProperties;
 import com.rackspace.salus.monitor_management.web.client.MonitorApi;
 import com.rackspace.salus.monitor_management.web.model.BoundMonitorDTO;
+import com.rackspace.salus.resource_management.web.client.ResourceApi;
 import com.rackspace.salus.services.TelemetryEdge;
 import com.rackspace.salus.services.TelemetryEdge.EnvoyInstruction;
 import com.rackspace.salus.services.TelemetryEdge.EnvoyInstructionConfigure;
@@ -47,9 +48,19 @@ import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
-import org.mockito.junit.MockitoJUnitRunner;
+import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.annotation.DirtiesContext;
+import org.springframework.test.annotation.DirtiesContext.ClassMode;
+import org.springframework.test.context.ContextConfiguration;
+import org.springframework.test.context.junit4.SpringRunner;
 
-@RunWith(MockitoJUnitRunner.class)
+@RunWith(SpringRunner.class)
+@DirtiesContext(classMode = ClassMode.AFTER_EACH_TEST_METHOD)
+@ContextConfiguration(classes = {
+    ResourceLabelsService.class,
+    KafkaTopicProperties.class,
+    ResourceLabelsServiceTest.TestConfig.class
+})
 public class MonitorEventListenerTest {
 
   @Mock
@@ -58,6 +69,9 @@ public class MonitorEventListenerTest {
   @Mock
   MonitorApi monitorApi;
 
+  @MockBean
+  ResourceApi resourceApi;
+
   @Captor
   ArgumentCaptor<EnvoyInstruction> envoyInstructionArg;
 
@@ -65,7 +79,7 @@ public class MonitorEventListenerTest {
 
   @Before
   public void setUp() throws Exception {
-    monitorEventListener = new MonitorEventListener(new KafkaTopicProperties(), envoyRegistry, monitorApi);
+    monitorEventListener = new MonitorEventListener(new KafkaTopicProperties(), envoyRegistry, monitorApi, "host-0");
   }
 
   @Test

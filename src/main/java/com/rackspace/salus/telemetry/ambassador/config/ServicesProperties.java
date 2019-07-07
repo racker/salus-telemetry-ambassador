@@ -29,4 +29,6 @@ public class ServicesProperties {
   String monitorManagementUrl;
   @NotEmpty
   String resourceManagementUrl;
+  @NotEmpty
+  String agentCatalogManagementUrl;
 }
