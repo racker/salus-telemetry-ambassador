@@ -120,7 +120,7 @@ public class AgentInstallsListenerTest {
 
     agentInstallsListener.handleAgentInstallEvent(
         new AgentInstallChangeEvent()
-        .setOp(OperationType.UPDATE)
+        .setOp(OperationType.UPSERT)
         .setAgentType(AgentType.TELEGRAF)
         .setTenantId("t-1")
         .setResourceId("r-1")
@@ -156,7 +156,7 @@ public class AgentInstallsListenerTest {
 
     agentInstallsListener.handleAgentInstallEvent(
         new AgentInstallChangeEvent()
-        .setOp(OperationType.UPDATE)
+        .setOp(OperationType.UPSERT)
         .setAgentType(AgentType.TELEGRAF)
         .setTenantId("t-1")
         .setResourceId("r-1")

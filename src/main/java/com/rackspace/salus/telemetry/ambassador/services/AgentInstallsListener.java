@@ -76,8 +76,8 @@ public class AgentInstallsListener implements ConsumerSeekAware {
     final OperationType op = event.getOp();
 
     switch (op) {
-      case UPDATE:
-        log.debug("Processing agent install update for event={}", event);
+      case UPSERT:
+        log.debug("Processing agent install upsert for event={}", event);
         processAgentInstallUpdate(event);
         break;
 
