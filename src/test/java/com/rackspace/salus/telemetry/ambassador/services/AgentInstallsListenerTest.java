@@ -93,7 +93,7 @@ public class AgentInstallsListenerTest {
   }
 
   @Test
-  public void testHandleInstallEvent() {
+  public void testHandleInstallEvent_exists() {
 
     when(envoyRegistry.getEnvoyIdByResource("r-1"))
         .thenReturn("e-1");
@@ -142,6 +142,29 @@ public class AgentInstallsListenerTest {
     assertThat(installInstruction.getAgent()).isNotNull();
     assertThat(installInstruction.getAgent().getVersion()).isEqualTo("VERSION");
     assertThat(installInstruction.getAgent().getType()).isEqualTo(TelemetryEdge.AgentType.TELEGRAF);
+
+    verifyNoMoreInteractions(envoyRegistry, agentInstallApi);
+  }
+
+  @Test
+  public void testHandleInstallEvent_notOurs() {
+
+    when(envoyRegistry.containsEnvoyResource(any()))
+        .thenReturn(false);
+
+    // EXECUTE
+
+    agentInstallsListener.handleAgentInstallEvent(
+        new AgentInstallChangeEvent()
+        .setOp(OperationType.UPDATE)
+        .setAgentType(AgentType.TELEGRAF)
+        .setTenantId("t-1")
+        .setResourceId("r-1")
+    );
+
+    // VERIFY
+
+    verify(envoyRegistry).containsEnvoyResource("r-1");
 
     verifyNoMoreInteractions(envoyRegistry, agentInstallApi);
   }

@@ -70,6 +70,7 @@ public class AgentInstallsListener implements ConsumerSeekAware {
   public void handleAgentInstallEvent(AgentInstallChangeEvent event) {
     if (!envoyRegistry.containsEnvoyResource(event.getResourceId())) {
       log.trace("Discarded event={} for unregistered Envoy Resource", event);
+      return;
     }
 
     final OperationType op = event.getOp();
@@ -99,6 +100,8 @@ public class AgentInstallsListener implements ConsumerSeekAware {
                 .getBindingForResourceAndAgentType(event.getTenantId(), event.getResourceId(),
                     event.getAgentType()
                 ));
+
+    log.debug("Retrieved agentInstallBinding={} for processing event={}", binding, event);
 
     final AgentReleaseDTO agentRelease = binding.getAgentInstall().getAgentRelease();
 
