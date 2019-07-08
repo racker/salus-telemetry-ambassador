@@ -66,7 +66,7 @@ public class AgentInstallsListener implements ConsumerSeekAware {
     return "ambassador-installs-" + ourHostName;
   }
 
-  @KafkaListener(topics = "#{__listener.topic", groupId = "#{__listener.groupId}")
+  @KafkaListener(topics = "#{__listener.topic}", groupId = "#{__listener.groupId}")
   public void handleAgentInstallEvent(AgentInstallChangeEvent event) {
     if (!envoyRegistry.containsEnvoyResource(event.getResourceId())) {
       log.trace("Discarded event={} for unregistered Envoy Resource", event);
