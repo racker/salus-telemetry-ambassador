@@ -22,14 +22,13 @@ import com.rackspace.salus.monitor_management.web.model.BoundMonitorDTO;
 import com.rackspace.salus.services.TelemetryEdge.EnvoyInstruction;
 import com.rackspace.salus.telemetry.messaging.MonitorBoundEvent;
 import com.rackspace.salus.telemetry.messaging.OperationType;
-import java.net.InetAddress;
-import java.net.UnknownHostException;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.common.TopicPartition;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.listener.ConsumerSeekAware;
 import org.springframework.stereotype.Service;
@@ -41,14 +40,17 @@ public class MonitorEventListener implements ConsumerSeekAware {
   private final String topic;
   private final EnvoyRegistry envoyRegistry;
   private final MonitorApi monitorApi;
+  private final String ourHostName;
 
   @Autowired
   public MonitorEventListener(KafkaTopicProperties kafkaTopicProperties,
                               EnvoyRegistry envoyRegistry,
-                              MonitorApi monitorApi) {
+                              MonitorApi monitorApi,
+                              @Value("${localhost.name}") String ourHostName) {
     this.topic = kafkaTopicProperties.getMonitors();
     this.envoyRegistry = envoyRegistry;
     this.monitorApi = monitorApi;
+    this.ourHostName = ourHostName;
   }
 
   @SuppressWarnings("unused") // used in SpEL
@@ -57,8 +59,8 @@ public class MonitorEventListener implements ConsumerSeekAware {
   }
 
   @SuppressWarnings("unused") // used in SpEL
-  public String getGroupId() throws UnknownHostException {
-    return "ambassador-monitors-"+InetAddress.getLocalHost().getHostAddress();
+  public String getGroupId() {
+    return "ambassador-monitors-"+ourHostName;
   }
 
   @KafkaListener(topics = "#{__listener.topic}", groupId = "#{__listener.groupId}")

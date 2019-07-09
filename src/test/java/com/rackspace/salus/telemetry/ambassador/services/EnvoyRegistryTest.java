@@ -1,7 +1,24 @@
+/*
+ * Copyright 2019 Rackspace US, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package com.rackspace.salus.telemetry.ambassador.services;
 
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsInAnyOrder;
+import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.nullValue;
@@ -20,8 +37,6 @@ import com.rackspace.salus.services.TelemetryEdge.EnvoySummary;
 import com.rackspace.salus.telemetry.ambassador.config.AmbassadorProperties;
 import com.rackspace.salus.telemetry.ambassador.config.GrpcConfig;
 import com.rackspace.salus.telemetry.ambassador.types.ZoneNotAuthorizedException;
-import com.rackspace.salus.telemetry.etcd.EtcdUtils;
-import com.rackspace.salus.telemetry.etcd.services.EnvoyLabelManagement;
 import com.rackspace.salus.telemetry.etcd.services.EnvoyLeaseTracking;
 import com.rackspace.salus.telemetry.etcd.services.EnvoyResourceManagement;
 import com.rackspace.salus.telemetry.etcd.services.ZoneStorage;
@@ -66,9 +81,6 @@ import org.springframework.util.concurrent.ListenableFuture;
 public class EnvoyRegistryTest {
 
   @MockBean
-  EnvoyLabelManagement envoyLabelManagement;
-
-  @MockBean
   EnvoyLeaseTracking envoyLeaseTracking;
 
   @MockBean
@@ -102,12 +114,6 @@ public class EnvoyRegistryTest {
     final CompletableFuture<Long> assignedLease = CompletableFuture.completedFuture(1234L);
     when(envoyLeaseTracking.grant(any()))
         .thenReturn(assignedLease);
-
-    when(envoyLabelManagement.registerAndSpreadEnvoy(any(), any(), any(), anyLong(), any(), any()))
-        .then(invocationOnMock -> EtcdUtils.completedPutResponse());
-
-    when(envoyLabelManagement.pullAgentInstallsForEnvoy(any(), any(), any(), any(), any()))
-        .thenReturn(CompletableFuture.completedFuture(0));
 
     when(envoyResourceManagement.registerResource(any(), any(), anyLong(), any(), any(), any()))
         .thenReturn(CompletableFuture.completedFuture(new ResourceInfo()));
@@ -151,12 +157,6 @@ public class EnvoyRegistryTest {
     when(envoyLeaseTracking.grant(any()))
         .thenReturn(assignedLease);
 
-    when(envoyLabelManagement.registerAndSpreadEnvoy(any(), any(), any(), anyLong(), any(), any()))
-        .then(invocationOnMock -> EtcdUtils.completedPutResponse());
-
-    when(envoyLabelManagement.pullAgentInstallsForEnvoy(any(), any(), any(), any(), any()))
-        .thenReturn(CompletableFuture.completedFuture(0));
-
     when(envoyResourceManagement.registerResource(any(), any(), anyLong(), any(), any(), any()))
         .thenReturn(CompletableFuture.completedFuture(new ResourceInfo()));
 
@@ -185,6 +185,58 @@ public class EnvoyRegistryTest {
     verify(zoneAuthorizer).authorize("t-1", "z-1");
 
     verify(zoneStorage).registerEnvoyInZone(resolvedZone, "e-1", "hostname:test-host", 1234L);
+
+    verify(kafkaTemplate)
+        .send(
+            "telemetry.attaches.json",
+            "t-1:hostname:test-host",
+            new AttachEvent()
+                .setResourceId("hostname:test-host")
+                .setLabels(Collections.singletonMap("agent_discovered_os", "linux"))
+                .setEnvoyId("e-1")
+                .setTenantId("t-1")
+                .setEnvoyAddress("localhost")
+        );
+
+    verifyNoMoreInteractions(kafkaTemplate, zoneAuthorizer, zoneStorage, resourceLabelsService);
+  }
+
+  @Test
+  public void storesEnvoyResourceOnAttach() throws StatusException, ZoneNotAuthorizedException {
+    final EnvoySummary envoySummary = EnvoySummary.newBuilder()
+        .setResourceId("hostname:test-host")
+        .putLabels("discovered_os", "linux")
+        .build();
+
+    final CompletableFuture<Long> assignedLease = CompletableFuture.completedFuture(1234L);
+    when(envoyLeaseTracking.grant(any()))
+        .thenReturn(assignedLease);
+
+    when(envoyResourceManagement.registerResource(any(), any(), anyLong(), any(), any(), any()))
+        .thenReturn(CompletableFuture.completedFuture(new ResourceInfo()));
+
+    RecordMetadata recordMetadata = new RecordMetadata(
+        new TopicPartition("telemetry.attaches.json", 0),
+        0, 0, 0, null, 0, 0
+    );
+    SendResult sendResult = new SendResult(null, recordMetadata);
+    ListenableFuture lf = new CompletableToListenableFutureAdapter(
+        CompletableFuture.completedFuture(sendResult));
+    when(kafkaTemplate.send(anyString(), anyString(), any()))
+        .thenReturn(lf);
+
+    // EXECUTE
+
+    envoyRegistry.attach("t-1", "e-1", envoySummary,
+        InetSocketAddress.createUnresolved("localhost", 60000), streamObserver
+    ).join();
+
+    // VERIFY
+
+    assertThat(envoyRegistry.contains("e-1"), equalTo(true));
+    assertThat(envoyRegistry.getResourceId("e-1"), equalTo("hostname:test-host"));
+    assertThat(envoyRegistry.containsEnvoyResource("hostname:test-host"), equalTo(true));
+    assertThat(envoyRegistry.getEnvoyIdByResource("hostname:test-host"), equalTo("e-1"));
 
     verify(kafkaTemplate)
         .send(
