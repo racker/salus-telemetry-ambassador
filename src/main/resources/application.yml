@@ -1,30 +1,63 @@
+salus:
+  spring:
+    resources:
+      # disable serving of static web files since this is a REST/Actuator only web app
+      add-mappings: false
+    kafka:
+      producer:
+        value-serializer: com.rackspace.salus.telemetry.ambassador.services.StringSafeJsonSerializer
+        key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      consumer:
+        key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+        value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+        properties:
+          spring:
+            json:
+              trusted:
+                packages: com.rackspace.salus.telemetry.messaging
+  management.endpoints.web.exposure.include: "health,jolokia,metrics"
+  management:
+    metrics:
+      export:
+        statsd:
+          flavor: ${statsd.flavor:telegraf}
+          host: ${statsd.host:localhost}
+          port: ${statsd.port:8125}
+          enabled: ${statsd.enabled:false}
+        influx:
+          db: telemetry-ambassador
+          host: ${statsd.host:localhost}
+          port: ${statsd.port:8086}
+          enabled: ${influx.enabled:false}
 spring:
   resources:
     # disable serving of static web files since this is a REST/Actuator only web app
-    add-mappings: false
+    add-mappings: ${salus.spring.resources.add-mappings}
   kafka:
     producer:
-      value-serializer: com.rackspace.salus.telemetry.ambassador.services.StringSafeJsonSerializer
-      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: ${salus.spring.kafka.producer.value-serializer}
+      key-serializer: ${salus.spring.kafka.producer.key-serializer}
     consumer:
-      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      key-deserializer: ${salus.spring.kafka.consumer.key-deserializer}
+      value-deserializer: ${salus.spring.kafka.consumer.value-deserializer}
       properties:
         spring:
           json:
             trusted:
               packages: com.rackspace.salus.telemetry.messaging
-management.endpoints.web.exposure.include: "health,jolokia,metrics"
+management.endpoints.web.exposure.include: ${salus.management.endpoints.web.exposure.include}
 management:
   metrics:
     export:
       statsd:
-        flavor: ${statsd.flavor:telegraf}
-        host: ${statsd.host:localhost}
-        port: ${statsd.port:8125}
-        enabled: ${statsd.enabled:false}
+        flavor: ${salus.management.export.statsd.flavor}
+        host: ${salus.management.export.statsd.host}
+        port: ${salus.management.export.statsd.port}
+        enabled: ${salus.management.export.statsd.enabled}
       influx:
-        db: telemetry-ambassador
-        host: ${statsd.host:localhost}
-        port: ${statsd.port:8086}
-        enabled: ${influx.enabled:false}
+        db: ${salus.management.export.influx.db}
+        host: ${salus.management.export.influx.host}
+        port: ${salus.management.export.influx.port}
+        enabled: ${salus.management.export.influx.enabled}
+
+  
