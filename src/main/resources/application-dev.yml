@@ -1,4 +1,4 @@
-etcd:
+salus.etcd:
   url: http://localhost:2479
 server:
   port: 8081
@@ -6,10 +6,11 @@ logging:
   level:
     com.rackspace.salus: debug
     com.rackspace.salus.telemetry.ambassador.services.MonitorEventListener: trace
-ambassador:
-  public-zone-tenants:
-    - aaaaaa
-services:
-  monitor-management-url: http://localhost:8089
-  resource-management-url: http://localhost:8085
-  agent-catalog-management-url: http://localhost:8090
+salus:
+  ambassador:
+    public-zone-tenants:
+      - aaaaaa
+  services:
+    monitor-management-url: http://localhost:8089
+    resource-management-url: http://localhost:8085
+    agent-catalog-management-url: http://localhost:8090
