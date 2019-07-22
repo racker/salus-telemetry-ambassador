@@ -24,7 +24,7 @@ import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
-@ConfigurationProperties("ambassador")
+@ConfigurationProperties("salus.ambassador")
 @Component
 @Data
 public class AmbassadorProperties {

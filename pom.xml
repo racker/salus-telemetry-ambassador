@@ -211,7 +211,7 @@
                 </executions>
 
                 <configuration>
-                    <workingDirectory>../dev</workingDirectory>
+                    <workingDirectory>../../dev</workingDirectory>
                     <arguments>--logging.level.com.rackspace.salus=debug</arguments>
                 </configuration>
             </plugin>
