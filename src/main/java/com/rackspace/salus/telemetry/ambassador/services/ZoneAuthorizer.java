@@ -21,12 +21,12 @@ import com.rackspace.salus.monitor_management.web.model.ZoneDTO;
 import com.rackspace.salus.telemetry.ambassador.config.AmbassadorProperties;
 import com.rackspace.salus.telemetry.ambassador.types.ZoneNotAuthorizedException;
 import com.rackspace.salus.telemetry.etcd.types.ResolvedZone;
+import java.util.List;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.ResourceAccessException;
-import java.util.List;
 
 /**
  * Handles validation and authorization of public zones.
@@ -91,7 +91,7 @@ public class ZoneAuthorizer {
       zones = zoneApi.getAvailableZones(tenantId);
     } catch (ResourceAccessException e) {
       // need to do something here to handle things more gracefully.
-      throw new RuntimeException("Unable to validate zones.");
+      throw new RuntimeException("Unable to validate zones.", e);
     }
     boolean found = zones.stream().anyMatch(z -> z.getName().equals(zone));
 
