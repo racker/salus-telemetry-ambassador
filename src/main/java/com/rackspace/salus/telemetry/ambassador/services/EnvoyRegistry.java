@@ -73,341 +73,333 @@ import org.springframework.util.concurrent.ListenableFuture;
 @Slf4j
 public class EnvoyRegistry {
 
-    private final AmbassadorProperties appProperties;
-    private final KafkaTopicProperties kafkaTopics;
+  private final AmbassadorProperties appProperties;
+  private final KafkaTopicProperties kafkaTopics;
   private final EnvoyLeaseTracking envoyLeaseTracking;
-    private final EnvoyResourceManagement envoyResourceManagement;
-    private final ResourceLabelsService resourceLabelsService;
-    private final ZoneAuthorizer zoneAuthorizer;
-    private final ZoneStorage zoneStorage;
-  private final KafkaTemplate<String,Object> kafkaTemplate;
-    private final Counter unauthorizedZoneCounter;
-    private final HashFunction boundMonitorHashFunction;
+  private final EnvoyResourceManagement envoyResourceManagement;
+  private final ResourceLabelsService resourceLabelsService;
+  private final ZoneAuthorizer zoneAuthorizer;
+  private final ZoneStorage zoneStorage;
+  private final KafkaTemplate<String, Object> kafkaTemplate;
+  private final Counter unauthorizedZoneCounter;
+  private final HashFunction boundMonitorHashFunction;
+  private ConcurrentHashMap<String, EnvoyEntry> envoys = new ConcurrentHashMap<>();
+  private ConcurrentHashMap<String, EnvoyEntry> envoysByResourceId = new ConcurrentHashMap<>();
 
-    @Data
-    static class EnvoyEntry {
-        final StreamObserver<TelemetryEdge.EnvoyInstruction> instructionStream;
-        final String tenantId;
-        final String envoyId;
-        final String resourceId;
+  @SuppressWarnings("SpringJavaInjectionPointsAutowiringInspection")
+  @Autowired
+  public EnvoyRegistry(AmbassadorProperties appProperties,
+      KafkaTopicProperties kafkaTopics,
+      EnvoyLeaseTracking envoyLeaseTracking,
+      EnvoyResourceManagement envoyResourceManagement,
+      ResourceLabelsService resourceLabelsService,
+      ZoneAuthorizer zoneAuthorizer,
+      ZoneStorage zoneStorage,
+      KafkaTemplate<String, Object> kafkaTemplate,
+      MeterRegistry meterRegistry) {
+    this.appProperties = appProperties;
+    this.kafkaTopics = kafkaTopics;
+    this.envoyLeaseTracking = envoyLeaseTracking;
+    this.envoyResourceManagement = envoyResourceManagement;
+    this.resourceLabelsService = resourceLabelsService;
+    this.zoneAuthorizer = zoneAuthorizer;
+    this.zoneStorage = zoneStorage;
+    this.kafkaTemplate = kafkaTemplate;
+    this.boundMonitorHashFunction = Hashing.adler32();
 
-      /**
-       * Maps {@link BoundMonitorUtils#buildConfiguredMonitorId(BoundMonitorDTO)}
-       * to a hash of its the bound monitor's rendered content
-       */
-      Map<String, BoundMonitorEntry> boundMonitors = new HashMap<>();
+    unauthorizedZoneCounter = meterRegistry.counter("attachErrors", "type", "unauthorizedZone");
+  }
+
+  private static <K, V> List<V> getOrCreate(HashMap<K, List<V>> map, K key) {
+    return map.computeIfAbsent(key, operationType -> new ArrayList<>());
+  }
+
+  private static ResourceKey buildResourceKey(BoundMonitorDTO boundMonitorDTO) {
+    return new ResourceKey(
+        boundMonitorDTO.getResourceTenant(), boundMonitorDTO.getResourceId());
+  }
+
+  /**
+   * Executed whenever we receive a new connection from an envoy.
+   *
+   * @param tenantId tenant of the attached Envoy
+   * @param envoyId the Envoy's UUID
+   * @param envoySummary the Envoy summary
+   * @param remoteAddr the remote IP+port of the Envoy
+   * @param instructionStreamObserver the response stream
+   * @return a {@link CompletableFuture} of the lease ID granted to the attached Envoy
+   */
+  public CompletableFuture<?> attach(String tenantId, String envoyId, EnvoySummary envoySummary,
+      SocketAddress remoteAddr, StreamObserver<EnvoyInstruction> instructionStreamObserver)
+      throws StatusException {
+
+    final ResolvedZone zone;
+    if (StringUtils.hasText(envoySummary.getZone())) {
+      try {
+        zone = zoneAuthorizer.authorize(tenantId, envoySummary.getZone());
+      } catch (ZoneNotAuthorizedException e) {
+        unauthorizedZoneCounter.increment();
+        log.warn("Envoy attachment from remoteAddr={} is unauthorized: {}", remoteAddr,
+            e.getMessage());
+        throw new StatusException(Status.INVALID_ARGUMENT.withDescription(e.getMessage()));
+      } catch (IllegalArgumentException e) {
+        log.debug("Envoy attachment from remoteAddr={} specified invalid zone: {}", remoteAddr,
+            e.getMessage());
+        throw new StatusException(Status.INVALID_ARGUMENT.withDescription(e.getMessage()));
+      }
+    } else {
+      zone = null;
     }
 
-    @Data
-    static class BoundMonitorEntry {
+    final Map<String, String> envoyLabels = processEnvoyLabels(envoySummary);
+    final List<String> supportedAgentTypes = convertToStrings(
+        envoySummary.getSupportedAgentsList());
 
-      /**
-       * Hash of the rendered bound monitor content. Used to detect updates to existing
-       * monitor.
-       */
-      final HashCode hashCode;
-      /**
-       * agentType is needed to handle deletion of entries.
-       */
-      final AgentType agentType;
-      /**
-       * monitorId is needed to handle deletion of entries.
-       */
-      final UUID monitorId;
-      /**
-       * The tenant owning the resource. Needed to handle deletion of entries.
-       */
-      final String resourceTenantId;
-      /**
-       * resourceId is needed to handle deletion of entries.
-       */
-      final String resourceId;
+    final String resourceId = envoySummary.getResourceId();
+    if (!StringUtils.hasText(resourceId)) {
+      throw new StatusException(Status.INVALID_ARGUMENT.withDescription("resourceId is required"));
     }
 
-    private ConcurrentHashMap<String, EnvoyEntry> envoys = new ConcurrentHashMap<>();
-    private ConcurrentHashMap<String, EnvoyEntry> envoysByResourceId = new ConcurrentHashMap<>();
-
-    @SuppressWarnings("SpringJavaInjectionPointsAutowiringInspection")
-    @Autowired
-    public EnvoyRegistry(AmbassadorProperties appProperties,
-                         KafkaTopicProperties kafkaTopics,
-                         EnvoyLeaseTracking envoyLeaseTracking,
-                         EnvoyResourceManagement envoyResourceManagement,
-                         ResourceLabelsService resourceLabelsService,
-                         ZoneAuthorizer zoneAuthorizer,
-                         ZoneStorage zoneStorage,
-                         KafkaTemplate<String, Object> kafkaTemplate,
-                         MeterRegistry meterRegistry) {
-        this.appProperties = appProperties;
-        this.kafkaTopics = kafkaTopics;
-        this.envoyLeaseTracking = envoyLeaseTracking;
-        this.envoyResourceManagement = envoyResourceManagement;
-        this.resourceLabelsService = resourceLabelsService;
-        this.zoneAuthorizer = zoneAuthorizer;
-        this.zoneStorage = zoneStorage;
-        this.kafkaTemplate = kafkaTemplate;
-        this.boundMonitorHashFunction = Hashing.adler32();
-
-        unauthorizedZoneCounter = meterRegistry.counter("attachErrors", "type", "unauthorizedZone");
+    EnvoyEntry existingEntry = envoys.get(envoyId);
+    if (existingEntry != null) {
+      log.warn(
+          "Saw re-attachment of same envoy id={}, so aborting the previous stream to solve race condition",
+          envoyId);
+      existingEntry.instructionStream.onError(
+          new StatusException(Status.ABORTED.withDescription("Reconnect seen from same envoyId")));
+      envoyLeaseTracking.revoke(envoyId);
     }
 
-    /**
-     * Executed whenever we receive a new connection from an envoy.
-     *
-     * @param tenantId tenant of the attached Envoy
-     * @param envoyId the Envoy's UUID
-     * @param envoySummary the Envoy summary
-     * @param remoteAddr the remote IP+port of the Envoy
-     * @param instructionStreamObserver the response stream
-     * @return a {@link CompletableFuture} of the lease ID granted to the attached Envoy
-     * @throws StatusException
-     */
-    public CompletableFuture<?> attach(String tenantId, String envoyId, EnvoySummary envoySummary,
-                                            SocketAddress remoteAddr, StreamObserver<EnvoyInstruction> instructionStreamObserver)
-                throws StatusException {
+    log.info(
+        "Attaching envoy tenantId={}, envoyId={} from remoteAddr={} with resourceId={}, zone={}, labels={}, supports agents={}",
+        tenantId, envoyId, remoteAddr, resourceId, zone, envoyLabels, supportedAgentTypes);
 
-        final ResolvedZone zone;
-        if (StringUtils.hasText(envoySummary.getZone())) {
-          try {
-            zone = zoneAuthorizer.authorize(tenantId, envoySummary.getZone());
-          } catch (ZoneNotAuthorizedException e) {
-            unauthorizedZoneCounter.increment();
-            log.warn("Envoy attachment from remoteAddr={} is unauthorized: {}", remoteAddr, e.getMessage());
-            throw new StatusException(Status.INVALID_ARGUMENT.withDescription(e.getMessage()));
-          } catch (IllegalArgumentException e) {
-            log.debug("Envoy attachment from remoteAddr={} specified invalid zone: {}", remoteAddr, e.getMessage());
-            throw new StatusException(Status.INVALID_ARGUMENT.withDescription(e.getMessage()));
-          }
-        } else {
-          zone = null;
-        }
-
-        final Map<String, String> envoyLabels = processEnvoyLabels(envoySummary);
-        final List<String> supportedAgentTypes = convertToStrings(envoySummary.getSupportedAgentsList());
-
-        final String resourceId = envoySummary.getResourceId();
-        if (!StringUtils.hasText(resourceId)) {
-            throw new StatusException(Status.INVALID_ARGUMENT.withDescription("resourceId is required"));
-        }
-
-        EnvoyEntry existingEntry = envoys.get(envoyId);
-        if (existingEntry != null) {
-            log.warn("Saw re-attachment of same envoy id={}, so aborting the previous stream to solve race condition",
-                    envoyId);
-            existingEntry.instructionStream.onError(new StatusException(Status.ABORTED.withDescription("Reconnect seen from same envoyId")));
-            envoyLeaseTracking.revoke(envoyId);
-        }
-
-        log.info("Attaching envoy tenantId={}, envoyId={} from remoteAddr={} with resourceId={}, zone={}, labels={}, supports agents={}",
-            tenantId, envoyId, remoteAddr, resourceId, zone, envoyLabels, supportedAgentTypes);
-
-        return envoyLeaseTracking.grant(envoyId)
-            .thenApply(leaseId -> {
-              final EnvoyEntry entry = new EnvoyEntry(
-                  instructionStreamObserver, tenantId, envoyId, resourceId);
-              envoys.put(envoyId, entry);
-              envoysByResourceId.put(resourceId, entry);
-              return leaseId;
-            })
-            .thenCompose(leaseId ->
-                // register in zone if not null or passes through otherwise
-                registerInZone(envoyId, resourceId, zone, leaseId))
-            .thenCompose(leaseId ->
-                postAttachEvent(tenantId, envoyId, envoySummary, envoyLabels, remoteAddr)
+    return envoyLeaseTracking.grant(envoyId)
+        .thenApply(leaseId -> {
+          final EnvoyEntry entry = new EnvoyEntry(
+              instructionStreamObserver, tenantId, envoyId, resourceId);
+          envoys.put(envoyId, entry);
+          envoysByResourceId.put(resourceId, entry);
+          return leaseId;
+        })
+        .thenCompose(leaseId ->
+            // register in zone if not null or passes through otherwise
+            registerInZone(envoyId, resourceId, zone, leaseId))
+        .thenCompose(leaseId ->
+            postAttachEvent(tenantId, envoyId, envoySummary, envoyLabels, remoteAddr)
                 .thenApply(sendResult -> {
-                    log.debug("Posted attach event on partition={} for tenant={}, envoyId={}, resourceId={}",
-                        sendResult.getRecordMetadata().partition(),
-                        tenantId, envoyId, resourceId);
-                    return leaseId;
+                  log.debug(
+                      "Posted attach event on partition={} for tenant={}, envoyId={}, resourceId={}",
+                      sendResult.getRecordMetadata().partition(),
+                      tenantId, envoyId, resourceId);
+                  return leaseId;
                 }))
-            .thenCompose(leaseId ->
-                envoyResourceManagement.registerResource(tenantId, envoyId, leaseId, resourceId, envoyLabels, remoteAddr)
-                    .thenApply(putResponse -> {
-                        log.debug("Registered new envoy resource for presence monitoring for " +
-                                "tenant={}, envoyId={}, resourceId={}",
-                            tenantId, envoyId, resourceId);
-                        return leaseId;
-                    })
-            )
-            ;
+        .thenCompose(leaseId ->
+            envoyResourceManagement
+                .registerResource(tenantId, envoyId, leaseId, resourceId, envoyLabels, remoteAddr)
+                .thenApply(putResponse -> {
+                  log.debug("Registered new envoy resource for presence monitoring for " +
+                          "tenant={}, envoyId={}, resourceId={}",
+                      tenantId, envoyId, resourceId);
+                  return leaseId;
+                })
+        )
+        ;
 
-    }
+  }
 
   private CompletionStage<Long> registerInZone(String envoyId, String resourceId,
-                                               ResolvedZone zone, Long leaseId) {
+      ResolvedZone zone, Long leaseId) {
     if (zone != null) {
       return zoneStorage.registerEnvoyInZone(zone, envoyId, resourceId, leaseId)
           .thenApply(result -> {
             log.debug("Registered envoyId={} in zone={}", envoyId, zone);
             return leaseId;
           });
-    }
-    else {
+    } else {
       return CompletableFuture.completedFuture(leaseId);
     }
   }
 
   private Map<String, String> processEnvoyLabels(EnvoySummary envoySummary) {
 
-        // apply a namespace to the label names
-        return envoySummary.getLabelsMap().entrySet().stream()
-            .collect(Collectors.toMap(
-                entry -> applyNamespace(LabelNamespaces.AGENT, entry.getKey()),
-                Map.Entry::getValue
-            ));
-    }
+    // apply a namespace to the label names
+    return envoySummary.getLabelsMap().entrySet().stream()
+        .collect(Collectors.toMap(
+            entry -> applyNamespace(LabelNamespaces.AGENT, entry.getKey()),
+            Map.Entry::getValue
+        ));
+  }
 
-    private CompletableFuture<SendResult<String, Object>> postAttachEvent(String tenantId, String envoyId, EnvoySummary envoySummary,
-                                                                          Map<String, String> envoyLabels,
-                                                                          SocketAddress remoteAddr) {
+  private CompletableFuture<SendResult<String, Object>> postAttachEvent(String tenantId,
+      String envoyId, EnvoySummary envoySummary,
+      Map<String, String> envoyLabels,
+      SocketAddress remoteAddr) {
 
-        final String resourceId = envoySummary.getResourceId();
-        final AttachEvent attachEvent = new AttachEvent()
-            .setTenantId(tenantId)
-            .setEnvoyId(envoyId)
-            .setResourceId(resourceId)
-            .setEnvoyAddress(((InetSocketAddress) remoteAddr).getHostString())
-            .setLabels(envoyLabels);
+    final String resourceId = envoySummary.getResourceId();
+    final AttachEvent attachEvent = new AttachEvent()
+        .setTenantId(tenantId)
+        .setEnvoyId(envoyId)
+        .setResourceId(resourceId)
+        .setEnvoyAddress(((InetSocketAddress) remoteAddr).getHostString())
+        .setLabels(envoyLabels);
 
-        final ListenableFuture<SendResult<String, Object>> sendResultFuture;
-        sendResultFuture = kafkaTemplate.send(
-            kafkaTopics.getAttaches(),
-            buildMessageKey(attachEvent),
-            attachEvent
-        );
+    final ListenableFuture<SendResult<String, Object>> sendResultFuture;
+    sendResultFuture = kafkaTemplate.send(
+        kafkaTopics.getAttaches(),
+        buildMessageKey(attachEvent),
+        attachEvent
+    );
 
-        return sendResultFuture.completable();
-    }
+    return sendResultFuture.completable();
+  }
 
-    public boolean keepAlive(String instanceId, SocketAddress remoteAddr) {
-        log.trace("Processing keep alive for instanceId={} from={}", instanceId, remoteAddr);
+  public boolean keepAlive(String instanceId, SocketAddress remoteAddr) {
+    log.trace("Processing keep alive for instanceId={} from={}", instanceId, remoteAddr);
 
-        return envoyLeaseTracking.keepAlive(instanceId);
-    }
+    return envoyLeaseTracking.keepAlive(instanceId);
+  }
 
-    private List<String> convertToStrings(List<TelemetryEdge.AgentType> agentsList) {
-        return agentsList.stream()
-            .map(agentType -> agentType.name())
-            .collect(Collectors.toList());
-    }
+  private List<String> convertToStrings(List<TelemetryEdge.AgentType> agentsList) {
+    return agentsList.stream()
+        .map(agentType -> agentType.name())
+        .collect(Collectors.toList());
+  }
 
-    @Scheduled(fixedDelayString = "${ambassador.envoyRefreshInterval:PT10S}")
-    public void refreshEnvoys() {
+  @Scheduled(fixedDelayString = "${ambassador.envoyRefreshInterval:PT10S}")
+  public void refreshEnvoys() {
 
-        envoys.forEachKey(appProperties.getEnvoyRefreshParallelism(), instanceId -> {
-            final EnvoyEntry envoyEntry = envoys.get(instanceId);
+    envoys.forEachKey(appProperties.getEnvoyRefreshParallelism(), instanceId -> {
+      final EnvoyEntry envoyEntry = envoys.get(instanceId);
 
-            if (envoyEntry != null) {
-                try {
-                    synchronized (envoyEntry.instructionStream) {
-                        envoyEntry.instructionStream
-                            .onNext(TelemetryEdge.EnvoyInstruction.newBuilder()
-                                .setRefresh(
-                                    TelemetryEdge.EnvoyInstructionRefresh.newBuilder().build()
-                                )
-                                .build());
-                    }
-                } catch (Exception e) {
-                    // Most likely exceptions are due to the gRPC connection being closed by
-                    // Envoy connection loss or failure to establish attachment. The later
-                    // gets thrown as an IllegalStateException.
-                    processFailedSend(instanceId, e);
-                }
-            }
-        });
-    }
-
-    public void remove(String instanceId) {
-      final EnvoyEntry entry = envoys.remove(instanceId);
-      envoyLeaseTracking.revoke(instanceId);
-      resourceLabelsService.releaseResource(entry.getTenantId(), entry.getResourceId());
-    }
-
-    private void processFailedSend(String instanceId, Exception e) {
-        log.info("Removing envoy stream for id={} due to exception={}",
-            instanceId, e.getMessage());
-        remove(instanceId);
-    }
-
-    public boolean contains(String envoyInstanceId) {
-        return envoys.containsKey(envoyInstanceId);
-    }
-
-    public String getResourceId(String envoyInstanceId) {
-        final EnvoyEntry entry = envoys.get(envoyInstanceId);
-        return entry != null ? entry.getResourceId() : null;
-    }
-
-    public boolean containsEnvoyResource(String resourceId) {
-      return envoysByResourceId.containsKey(resourceId);
-    }
-
-    public String getEnvoyIdByResource(String resourceId) {
-      final EnvoyEntry entry = envoysByResourceId.get(resourceId);
-      return entry != null ? entry.getEnvoyId() : null;
-    }
-
-    public void sendInstruction(String envoyInstanceId, TelemetryEdge.EnvoyInstruction instruction) {
-        final EnvoyEntry envoyEntry = envoys.get(envoyInstanceId);
-
-        if (envoyEntry != null) {
-            log.debug("Sending instruction={} to envoyInstance={}",
-                instruction, envoyInstanceId);
-
-            try {
-                synchronized (envoyEntry.instructionStream) {
-                    envoyEntry.instructionStream.onNext(instruction);
-                }
-            } catch (StatusRuntimeException e) {
-                processFailedSend(envoyInstanceId, e);
-            }
-        } else {
-            log.warn("No observer stream for envoyInstance={}, needed for sending instruction={}",
-                envoyInstanceId, instruction);
+      if (envoyEntry != null) {
+        try {
+          synchronized (envoyEntry.instructionStream) {
+            envoyEntry.instructionStream
+                .onNext(TelemetryEdge.EnvoyInstruction.newBuilder()
+                    .setRefresh(
+                        TelemetryEdge.EnvoyInstructionRefresh.newBuilder().build()
+                    )
+                    .build());
+          }
+        } catch (Exception e) {
+          // Most likely exceptions are due to the gRPC connection being closed by
+          // Envoy connection loss or failure to establish attachment. The later
+          // gets thrown as an IllegalStateException.
+          processFailedSend(instanceId, e);
         }
-    }
-
-    void createTestingEntry(String envoyId) {
-      envoys.put(envoyId, new EnvoyEntry(null, null, null, null));
-    }
-
-    /**
-     * Reconciles the given bound monitors for the envoy against the existing entry for that
-     * envoy.
-     * @param envoyId the envoy to reconcile
-     * @param boundMonitors the latest set of bound monitors provided by the monitor manager for
-     * this envoy
-     * @return a mapping of detected changes organized by change/operation type. For deletions,
-     * a BoundMonitorDTO is fabricated to convey the details of the deleted monitor.
-     */
-    @SuppressWarnings("UnstableApiUsage")
-    public Map<OperationType, List<BoundMonitorDTO>> applyBoundMonitors(String envoyId, List<BoundMonitorDTO> boundMonitors) {
-      final EnvoyEntry entry = envoys.get(envoyId);
-      if (entry == null) {
-        return null;
       }
+    });
+  }
 
-      final HashMap<OperationType, List<BoundMonitorDTO>> changes = new HashMap<>();
+  public void remove(String instanceId) {
+    final EnvoyEntry entry = envoys.remove(instanceId);
+    envoyLeaseTracking.revoke(instanceId);
+    resourceLabelsService.releaseResource(entry.getTenantId(), entry.getResourceId());
+  }
 
-      final Set<ResourceKey> resourcesToRetain = new HashSet<>();
+  private void processFailedSend(String instanceId, Exception e) {
+    log.info("Removing envoy stream for id={} due to exception={}",
+        instanceId, e.getMessage());
+    remove(instanceId);
+  }
 
-      synchronized (entry.getBoundMonitors()) {
-        final Map<String, BoundMonitorEntry> bindings = entry.getBoundMonitors();
-        // This will be used to track monitors that got removed by starting with all, but
-        // incrementally removing from this set as they're seen in the incoming bound monitors
-        final Set<String> staleMonitorIds = new HashSet<>(bindings.keySet());
+  public boolean contains(String envoyInstanceId) {
+    return envoys.containsKey(envoyInstanceId);
+  }
 
-        for (BoundMonitorDTO boundMonitor : boundMonitors) {
+  public String getResourceId(String envoyInstanceId) {
+    final EnvoyEntry entry = envoys.get(envoyInstanceId);
+    return entry != null ? entry.getResourceId() : null;
+  }
 
-          final String monitorId = BoundMonitorUtils.buildConfiguredMonitorId(boundMonitor);
-          staleMonitorIds.remove(monitorId);
-          resourcesToRetain.add(buildResourceKey(boundMonitor));
+  public boolean containsEnvoyResource(String resourceId) {
+    return envoysByResourceId.containsKey(resourceId);
+  }
 
-          final BoundMonitorEntry prevEntry = bindings.get(monitorId);
+  public String getEnvoyIdByResource(String resourceId) {
+    final EnvoyEntry entry = envoysByResourceId.get(resourceId);
+    return entry != null ? entry.getEnvoyId() : null;
+  }
 
-          if (prevEntry == null) {
-            // CREATED
-            getOrCreate(changes, OperationType.CREATE).add(boundMonitor);
+  public void sendInstruction(String envoyInstanceId, TelemetryEdge.EnvoyInstruction instruction) {
+    final EnvoyEntry envoyEntry = envoys.get(envoyInstanceId);
+
+    if (envoyEntry != null) {
+      log.debug("Sending instruction={} to envoyInstance={}",
+          instruction, envoyInstanceId);
+
+      try {
+        synchronized (envoyEntry.instructionStream) {
+          envoyEntry.instructionStream.onNext(instruction);
+        }
+      } catch (StatusRuntimeException e) {
+        processFailedSend(envoyInstanceId, e);
+      }
+    } else {
+      log.warn("No observer stream for envoyInstance={}, needed for sending instruction={}",
+          envoyInstanceId, instruction);
+    }
+  }
+
+  void createTestingEntry(String envoyId) {
+    envoys.put(envoyId, new EnvoyEntry(null, null, null, null));
+  }
+
+  /**
+   * Reconciles the given bound monitors for the envoy against the existing entry for that envoy.
+   *
+   * @param envoyId the envoy to reconcile
+   * @param boundMonitors the latest set of bound monitors provided by the monitor manager for this
+   * envoy
+   * @return a mapping of detected changes organized by change/operation type. For deletions, a
+   * BoundMonitorDTO is fabricated to convey the details of the deleted monitor.
+   */
+  @SuppressWarnings("UnstableApiUsage")
+  public Map<OperationType, List<BoundMonitorDTO>> applyBoundMonitors(String envoyId,
+      List<BoundMonitorDTO> boundMonitors) {
+    final EnvoyEntry entry = envoys.get(envoyId);
+    if (entry == null) {
+      return null;
+    }
+
+    final HashMap<OperationType, List<BoundMonitorDTO>> changes = new HashMap<>();
+
+    final Set<ResourceKey> resourcesToRetain = new HashSet<>();
+
+    synchronized (entry.getBoundMonitors()) {
+      final Map<String, BoundMonitorEntry> bindings = entry.getBoundMonitors();
+      // This will be used to track monitors that got removed by starting with all, but
+      // incrementally removing from this set as they're seen in the incoming bound monitors
+      final Set<String> staleMonitorIds = new HashSet<>(bindings.keySet());
+
+      for (BoundMonitorDTO boundMonitor : boundMonitors) {
+
+        final String monitorId = BoundMonitorUtils.buildConfiguredMonitorId(boundMonitor);
+        staleMonitorIds.remove(monitorId);
+        resourcesToRetain.add(buildResourceKey(boundMonitor));
+
+        final BoundMonitorEntry prevEntry = bindings.get(monitorId);
+
+        if (prevEntry == null) {
+          // CREATED
+          getOrCreate(changes, OperationType.CREATE).add(boundMonitor);
+          bindings.put(
+              monitorId,
+              new BoundMonitorEntry(
+                  hashRenderedContent(boundMonitor), boundMonitor.getAgentType(),
+                  boundMonitor.getMonitorId(),
+                  boundMonitor.getResourceTenant(), boundMonitor.getResourceId()
+              )
+          );
+        } else {
+          // Possibly modified
+
+          final HashCode newHashCode = hashRenderedContent(boundMonitor);
+
+          if (!newHashCode.equals(prevEntry.getHashCode())) {
+            // UPDATED
+            getOrCreate(changes, OperationType.UPDATE).add(boundMonitor);
             bindings.put(
                 monitorId,
                 new BoundMonitorEntry(
@@ -416,85 +408,100 @@ public class EnvoyRegistry {
                     boundMonitor.getResourceTenant(), boundMonitor.getResourceId()
                 )
             );
-          } else {
-            // Possibly modified
-
-            final HashCode newHashCode = hashRenderedContent(boundMonitor);
-
-            if (!newHashCode.equals(prevEntry.getHashCode())) {
-              // UPDATED
-              getOrCreate(changes, OperationType.UPDATE).add(boundMonitor);
-              bindings.put(
-                  monitorId,
-                  new BoundMonitorEntry(
-                      hashRenderedContent(boundMonitor), boundMonitor.getAgentType(),
-                      boundMonitor.getMonitorId(),
-                      boundMonitor.getResourceTenant(), boundMonitor.getResourceId()
-                  )
-              );
-            }
           }
         }
+      }
 
-        // DELETE ones left over
-        for (String staleMonitorId : staleMonitorIds) {
-          final BoundMonitorEntry removed = bindings.remove(staleMonitorId);
-          getOrCreate(changes, OperationType.DELETE).add(
-              // fabricate a bound monitor just so we can convey the minimal attributes
-              new BoundMonitorDTO()
-              .setAgentType(removed.agentType)
-              .setMonitorId(removed.monitorId)
-              .setResourceTenant(removed.resourceTenantId)
-              .setResourceId(removed.resourceId)
-              // rendered content is not used by envoy, but needs to be non-null for gRPC
-              .setRenderedContent("")
-          );
+      // DELETE ones left over
+      for (String staleMonitorId : staleMonitorIds) {
+        final BoundMonitorEntry removed = bindings.remove(staleMonitorId);
+        getOrCreate(changes, OperationType.DELETE).add(
+            // fabricate a bound monitor just so we can convey the minimal attributes
+            new BoundMonitorDTO()
+                .setAgentType(removed.agentType)
+                .setMonitorId(removed.monitorId)
+                .setResourceTenant(removed.resourceTenantId)
+                .setResourceId(removed.resourceId)
+                // rendered content is not used by envoy, but needs to be non-null for gRPC
+                .setRenderedContent("")
+        );
 
-        }
+      }
 
-      } // end of synchronized block
+    } // end of synchronized block
 
-      updateResourceLabelTracking(resourcesToRetain, changes);
+    updateResourceLabelTracking(resourcesToRetain, changes);
 
-      return changes;
-    }
+    return changes;
+  }
 
-    private void updateResourceLabelTracking(
-        Set<ResourceKey> resourcesToRetain,
-        HashMap<OperationType, List<BoundMonitorDTO>> changes) {
+  private void updateResourceLabelTracking(
+      Set<ResourceKey> resourcesToRetain,
+      HashMap<OperationType, List<BoundMonitorDTO>> changes) {
 
-      changes.getOrDefault(OperationType.CREATE, emptyList()).stream()
-          .map(EnvoyRegistry::buildResourceKey)
-          .distinct()
-          .forEach(resourceKey -> {
-            resourceLabelsService
-                .trackResource(resourceKey.getTenantId(), resourceKey.getResourceId()
-                );
-          });
-      changes.getOrDefault(OperationType.DELETE, emptyList()).stream()
-          .map(EnvoyRegistry::buildResourceKey)
-          .filter(resourceKey -> !resourcesToRetain.contains(resourceKey))
-          .distinct()
-          .forEach(resourceKey -> {
-            resourceLabelsService
-                .releaseResource(resourceKey.getTenantId(), resourceKey.getResourceId());
-          });
-    }
+    changes.getOrDefault(OperationType.CREATE, emptyList()).stream()
+        .map(EnvoyRegistry::buildResourceKey)
+        .distinct()
+        .forEach(resourceKey -> {
+          resourceLabelsService
+              .trackResource(resourceKey.getTenantId(), resourceKey.getResourceId()
+              );
+        });
+    changes.getOrDefault(OperationType.DELETE, emptyList()).stream()
+        .map(EnvoyRegistry::buildResourceKey)
+        .filter(resourceKey -> !resourcesToRetain.contains(resourceKey))
+        .distinct()
+        .forEach(resourceKey -> {
+          resourceLabelsService
+              .releaseResource(resourceKey.getTenantId(), resourceKey.getResourceId());
+        });
+  }
 
-    private static <K,V> List<V> getOrCreate(HashMap<K, List<V>> map, K key) {
-      return map.computeIfAbsent(key, operationType -> new ArrayList<>());
-    }
+  @SuppressWarnings("UnstableApiUsage")
+  private HashCode hashRenderedContent(BoundMonitorDTO boundMonitor) {
+    return boundMonitorHashFunction.hashString(boundMonitor.getRenderedContent(),
+        StandardCharsets.UTF_8
+    );
+  }
 
-    private static ResourceKey buildResourceKey(BoundMonitorDTO boundMonitorDTO) {
-      return new ResourceKey(
-          boundMonitorDTO.getResourceTenant(), boundMonitorDTO.getResourceId());
-    }
+  @Data
+  static class EnvoyEntry {
 
-    @SuppressWarnings("UnstableApiUsage")
-    private HashCode hashRenderedContent(BoundMonitorDTO boundMonitor) {
-      return boundMonitorHashFunction.hashString(boundMonitor.getRenderedContent(),
-          StandardCharsets.UTF_8
-      );
-    }
+    final StreamObserver<TelemetryEdge.EnvoyInstruction> instructionStream;
+    final String tenantId;
+    final String envoyId;
+    final String resourceId;
+
+    /**
+     * Maps {@link BoundMonitorUtils#buildConfiguredMonitorId(BoundMonitorDTO)} to a hash of its the
+     * bound monitor's rendered content
+     */
+    Map<String, BoundMonitorEntry> boundMonitors = new HashMap<>();
+  }
+
+  @Data
+  static class BoundMonitorEntry {
+
+    /**
+     * Hash of the rendered bound monitor content. Used to detect updates to existing monitor.
+     */
+    final HashCode hashCode;
+    /**
+     * agentType is needed to handle deletion of entries.
+     */
+    final AgentType agentType;
+    /**
+     * monitorId is needed to handle deletion of entries.
+     */
+    final UUID monitorId;
+    /**
+     * The tenant owning the resource. Needed to handle deletion of entries.
+     */
+    final String resourceTenantId;
+    /**
+     * resourceId is needed to handle deletion of entries.
+     */
+    final String resourceId;
+  }
 
 }
