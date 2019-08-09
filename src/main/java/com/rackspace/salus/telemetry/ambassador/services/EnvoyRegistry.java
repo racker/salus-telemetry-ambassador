@@ -116,7 +116,7 @@ public class EnvoyRegistry {
 
   private static ResourceKey buildResourceKey(BoundMonitorDTO boundMonitorDTO) {
     return new ResourceKey(
-        boundMonitorDTO.getResourceTenant(), boundMonitorDTO.getResourceId());
+        boundMonitorDTO.getTenantId(), boundMonitorDTO.getResourceId());
   }
 
   /**
@@ -389,7 +389,7 @@ public class EnvoyRegistry {
               new BoundMonitorEntry(
                   hashRenderedContent(boundMonitor), boundMonitor.getAgentType(),
                   boundMonitor.getMonitorId(),
-                  boundMonitor.getResourceTenant(), boundMonitor.getResourceId()
+                  boundMonitor.getTenantId(), boundMonitor.getResourceId()
               )
           );
         } else {
@@ -405,7 +405,7 @@ public class EnvoyRegistry {
                 new BoundMonitorEntry(
                     hashRenderedContent(boundMonitor), boundMonitor.getAgentType(),
                     boundMonitor.getMonitorId(),
-                    boundMonitor.getResourceTenant(), boundMonitor.getResourceId()
+                    boundMonitor.getTenantId(), boundMonitor.getResourceId()
                 )
             );
           }
@@ -420,7 +420,7 @@ public class EnvoyRegistry {
             new BoundMonitorDTO()
                 .setAgentType(removed.agentType)
                 .setMonitorId(removed.monitorId)
-                .setResourceTenant(removed.resourceTenantId)
+                .setTenantId(removed.tenantId)
                 .setResourceId(removed.resourceId)
                 // rendered content is not used by envoy, but needs to be non-null for gRPC
                 .setRenderedContent("")
@@ -497,7 +497,7 @@ public class EnvoyRegistry {
     /**
      * The tenant owning the resource. Needed to handle deletion of entries.
      */
-    final String resourceTenantId;
+    final String tenantId;
     /**
      * resourceId is needed to handle deletion of entries.
      */

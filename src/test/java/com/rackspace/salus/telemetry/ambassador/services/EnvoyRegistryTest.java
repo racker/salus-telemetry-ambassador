@@ -291,18 +291,18 @@ public class EnvoyRegistryTest {
       final List<BoundMonitorDTO> boundMonitors = Arrays.asList(
           new BoundMonitorDTO()
               .setMonitorId(id1)
-              .setResourceTenant("t-1")
+              .setTenantId("t-1")
               .setResourceId("r-1")
               .setRenderedContent("{\"instance\":1, \"state\":1}"),
           new BoundMonitorDTO()
               .setMonitorId(id2)
-              .setResourceTenant("t-1")
+              .setTenantId("t-1")
               .setResourceId("r-2")
               .setAgentType(AgentType.TELEGRAF)
               .setRenderedContent("{\"instance\":2, \"state\":1}"),
           new BoundMonitorDTO()
               .setMonitorId(id3)
-              .setResourceTenant("t-1")
+              .setTenantId("t-1")
               .setZoneName("z-1")
               .setResourceId("r-3")
               .setRenderedContent("{\"instance\":3, \"state\":1}"),
@@ -310,7 +310,7 @@ public class EnvoyRegistryTest {
           new BoundMonitorDTO()
               .setMonitorId(id3)
               .setZoneName("z-1")
-              .setResourceTenant("t-1")
+              .setTenantId("t-1")
               .setResourceId("r-4")
               .setRenderedContent("{\"instance\":3, \"state\":1}")
       );
@@ -330,40 +330,40 @@ public class EnvoyRegistryTest {
           // id1 MODIFIED
           new BoundMonitorDTO()
               .setMonitorId(id1)
-              .setResourceTenant("t-1")
+              .setTenantId("t-1")
               .setResourceId("r-1")
               .setRenderedContent("{\"instance\":1, \"state\":2}"),
           // id2 REMOVED
           // id3, r-3 UNCHANGED
           new BoundMonitorDTO()
               .setMonitorId(id3)
-              .setResourceTenant("t-1")
+              .setTenantId("t-1")
               .setZoneName("z-1")
               .setResourceId("r-3")
               .setRenderedContent("{\"instance\":3, \"state\":1}"),
           // id3, r-4 UNCHANGED
           new BoundMonitorDTO()
               .setMonitorId(id3)
-              .setResourceTenant("t-1")
+              .setTenantId("t-1")
               .setZoneName("z-1")
               .setResourceId("r-4")
               .setRenderedContent("{\"instance\":3, \"state\":1}"),
           // id4, r-5 CREATED
           new BoundMonitorDTO()
               .setMonitorId(id4)
-              .setResourceTenant("t-1")
+              .setTenantId("t-1")
               .setResourceId("r-5")
               .setRenderedContent("{\"instance\":4, \"state\":1}"),
           // id5, r-5 CREATED to confirm resource label tracked only once per binding event
           new BoundMonitorDTO()
               .setMonitorId(id5)
-              .setResourceTenant("t-1")
+              .setTenantId("t-1")
               .setResourceId("r-5")
               .setRenderedContent("{\"instance\":5, \"state\":1}"),
           // id5, r-1 CREATED to confirm resource label re-tracked on this binding event
           new BoundMonitorDTO()
               .setMonitorId(id5)
-              .setResourceTenant("t-1")
+              .setTenantId("t-1")
               .setResourceId("r-1")
               .setRenderedContent("{\"instance\":6, \"state\":1}")
   );
@@ -375,31 +375,31 @@ public class EnvoyRegistryTest {
       assertThat(changes.get(OperationType.CREATE), containsInAnyOrder(
           new BoundMonitorDTO()
               .setMonitorId(id4)
-              .setResourceTenant("t-1")
+              .setTenantId("t-1")
               .setResourceId("r-5")
               .setRenderedContent("{\"instance\":4, \"state\":1}"),
           new BoundMonitorDTO()
               .setMonitorId(id5)
-              .setResourceTenant("t-1")
+              .setTenantId("t-1")
               .setResourceId("r-5")
               .setRenderedContent("{\"instance\":5, \"state\":1}"),
           new BoundMonitorDTO()
               .setMonitorId(id5)
-              .setResourceTenant("t-1")
+              .setTenantId("t-1")
               .setResourceId("r-1")
               .setRenderedContent("{\"instance\":6, \"state\":1}")
       ));
       assertThat(changes.get(OperationType.UPDATE), contains(
           new BoundMonitorDTO()
               .setMonitorId(id1)
-              .setResourceTenant("t-1")
+              .setTenantId("t-1")
               .setResourceId("r-1")
               .setRenderedContent("{\"instance\":1, \"state\":2}")
       ));
       assertThat(changes.get(OperationType.DELETE), contains(
           new BoundMonitorDTO()
               .setMonitorId(id2)
-              .setResourceTenant("t-1")
+              .setTenantId("t-1")
               .setResourceId("r-2")
               .setAgentType(AgentType.TELEGRAF)
               // rendered content is not used by envoy, but needs to be non-null for gRPC
