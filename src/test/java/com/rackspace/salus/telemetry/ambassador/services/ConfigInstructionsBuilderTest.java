@@ -51,6 +51,7 @@ public class ConfigInstructionsBuilderTest {
     builder.add(
         new BoundMonitorDTO()
             .setAgentType(TELEGRAF)
+            .setTenantId("t-1")
             .setRenderedContent("content1")
             .setMonitorId(m1)
             .setResourceId("r-1"),
@@ -59,6 +60,7 @@ public class ConfigInstructionsBuilderTest {
     builder.add(
         new BoundMonitorDTO()
             .setAgentType(TELEGRAF)
+            .setTenantId("t-1")
             .setRenderedContent("content2")
             .setMonitorId(m2)
             .setResourceId("r-1"),
@@ -67,6 +69,7 @@ public class ConfigInstructionsBuilderTest {
     builder.add(
         new BoundMonitorDTO()
             .setAgentType(TELEGRAF)
+            .setTenantId("t-1")
             .setRenderedContent("")
             .setMonitorId(m3)
             .setResourceId("r-1"),
@@ -75,6 +78,7 @@ public class ConfigInstructionsBuilderTest {
     builder.add(
         new BoundMonitorDTO()
             .setAgentType(FILEBEAT)
+            .setTenantId("t-1")
             .setRenderedContent("content4")
             .setMonitorId(m4)
             .setResourceId("r-1"),
@@ -85,7 +89,7 @@ public class ConfigInstructionsBuilderTest {
             .setAgentType(TELEGRAF)
             .setRenderedContent("content5")
             .setMonitorId(m5)
-            .setResourceTenant("t-1")
+            .setTenantId("t-1")
             .setResourceId("r-2")
             .setZoneName("z-1"),
         OperationType.CREATE

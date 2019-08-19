@@ -104,7 +104,7 @@ public class KafkaEgressTest {
     );
 
     embeddedKafka.consumeFromEmbeddedTopics(consumer, TOPIC_METRICS);
-    final ConsumerRecord<String, String> record = getSingleRecord(consumer, TOPIC_METRICS, 500);
+    final ConsumerRecord<String, String> record = getSingleRecord(consumer, TOPIC_METRICS, 1000);
 
     // Use Hamcrest matchers provided by spring-kafka-test
     // https://docs.spring.io/spring-kafka/docs/2.2.4.RELEASE/reference/#hamcrest-matchers
