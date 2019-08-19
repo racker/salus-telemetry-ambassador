@@ -39,7 +39,7 @@ public class TestMonitorEventListener {
   @Autowired
   public TestMonitorEventListener(EnvoyRegistry envoyRegistry,
                                   KafkaTopicProperties kafkaTopicProperties,
-                                  @Value("${spring.application.name") String appName,
+                                  @Value("${spring.application.name}") String appName,
                                   @Value("${localhost.name}") String ourHostName) {
     this.envoyRegistry = envoyRegistry;
     this.kafkaTopicProperties = kafkaTopicProperties;
