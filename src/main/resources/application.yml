@@ -14,6 +14,8 @@ spring:
           json:
             trusted:
               packages: com.rackspace.salus.telemetry.messaging
+  application:
+    name: salus-telemetry-ambassador
 management.endpoints.web.exposure.include: "health,jolokia,metrics"
 management:
   metrics:

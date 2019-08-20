@@ -16,8 +16,17 @@
 
 package com.rackspace.salus.telemetry.ambassador.services;
 
-import com.rackspace.salus.services.TelemetryAmbassadorGrpc;
-import com.rackspace.salus.services.TelemetryEdge;
+import com.rackspace.salus.services.TelemetryAmbassadorGrpc.TelemetryAmbassadorImplBase;
+import com.rackspace.salus.services.TelemetryEdge.EnvoyInstruction;
+import com.rackspace.salus.services.TelemetryEdge.EnvoySummary;
+import com.rackspace.salus.services.TelemetryEdge.KeepAliveRequest;
+import com.rackspace.salus.services.TelemetryEdge.KeepAliveResponse;
+import com.rackspace.salus.services.TelemetryEdge.LogEvent;
+import com.rackspace.salus.services.TelemetryEdge.PostLogEventResponse;
+import com.rackspace.salus.services.TelemetryEdge.PostMetricResponse;
+import com.rackspace.salus.services.TelemetryEdge.PostTestMonitorResultsResponse;
+import com.rackspace.salus.services.TelemetryEdge.PostedMetric;
+import com.rackspace.salus.services.TelemetryEdge.TestMonitorResults;
 import io.grpc.Status;
 import io.grpc.StatusException;
 import io.grpc.stub.ServerCallStreamObserver;
@@ -28,14 +37,16 @@ import java.net.SocketAddress;
 import lombok.extern.slf4j.Slf4j;
 import org.lognet.springboot.grpc.GRpcService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.task.TaskExecutor;
 
 @GRpcService
 @Slf4j
-public class EnvoyAmbassadorService extends TelemetryAmbassadorGrpc.TelemetryAmbassadorImplBase {
+public class EnvoyAmbassadorService extends TelemetryAmbassadorImplBase {
     private final EnvoyRegistry envoyRegistry;
     private final LogEventRouter logEventRouter;
     private final MetricRouter metricRouter;
+    private final TestMonitorResultsProducer testMonitorResultsProducer;
     private final TaskExecutor taskExecutor;
 
     // metrics counters
@@ -50,11 +61,13 @@ public class EnvoyAmbassadorService extends TelemetryAmbassadorGrpc.TelemetryAmb
     public EnvoyAmbassadorService(EnvoyRegistry envoyRegistry,
                                   LogEventRouter logEventRouter,
                                   MetricRouter metricRouter,
-                                  TaskExecutor taskExecutor,
+                                  TestMonitorResultsProducer testMonitorResultsProducer,
+                                  @Qualifier("taskExecutor") TaskExecutor taskExecutor,
                                   MeterRegistry meterRegistry) {
         this.envoyRegistry = envoyRegistry;
         this.logEventRouter = logEventRouter;
         this.metricRouter = metricRouter;
+        this.testMonitorResultsProducer = testMonitorResultsProducer;
         this.taskExecutor = taskExecutor;
 
         envoyAttach = meterRegistry.counter("messages","operation", "attach");
@@ -65,7 +78,7 @@ public class EnvoyAmbassadorService extends TelemetryAmbassadorGrpc.TelemetryAmb
     }
 
     @Override
-    public void attachEnvoy(TelemetryEdge.EnvoySummary request, StreamObserver<TelemetryEdge.EnvoyInstruction> responseObserver) {
+    public void attachEnvoy(EnvoySummary request, StreamObserver<EnvoyInstruction> responseObserver) {
         final SocketAddress remoteAddr = GrpcContextDetails.getCallerRemoteAddress();
         final String envoyId = GrpcContextDetails.getCallerEnvoyId();
 
@@ -85,9 +98,9 @@ public class EnvoyAmbassadorService extends TelemetryAmbassadorGrpc.TelemetryAmb
         }
     }
 
-    private void registerCancelHandler(String instanceId, SocketAddress remoteAddr, StreamObserver<TelemetryEdge.EnvoyInstruction> responseObserver) {
+    private void registerCancelHandler(String instanceId, SocketAddress remoteAddr, StreamObserver<EnvoyInstruction> responseObserver) {
         if (responseObserver instanceof ServerCallStreamObserver) {
-            ((ServerCallStreamObserver<TelemetryEdge.EnvoyInstruction>) responseObserver).setOnCancelHandler(() -> {
+            ((ServerCallStreamObserver<EnvoyInstruction>) responseObserver).setOnCancelHandler(() -> {
                 // run async to avoid cross-interactions with the etcd operations that also use grpc
                 taskExecutor.execute(() -> {
                     log.info("Removing cancelled envoy={} address={}", instanceId, remoteAddr);
@@ -102,14 +115,14 @@ public class EnvoyAmbassadorService extends TelemetryAmbassadorGrpc.TelemetryAmb
     }
 
     @Override
-    public void postLogEvent(TelemetryEdge.LogEvent request,
-                             StreamObserver<TelemetryEdge.PostLogEventResponse> responseObserver) {
+    public void postLogEvent(LogEvent request,
+                             StreamObserver<PostLogEventResponse> responseObserver) {
         final String envoyId = GrpcContextDetails.getCallerEnvoyId();
 
         postLog.increment();
         try {
             logEventRouter.route(GrpcContextDetails.getCallerTenantId(), envoyId, request);
-            responseObserver.onNext(TelemetryEdge.PostLogEventResponse.newBuilder().build());
+            responseObserver.onNext(PostLogEventResponse.newBuilder().build());
             responseObserver.onCompleted();
         } catch (Exception e) {
             log.warn("Failed to route log event, notifying Envoy", e);
@@ -118,14 +131,14 @@ public class EnvoyAmbassadorService extends TelemetryAmbassadorGrpc.TelemetryAmb
     }
 
     @Override
-    public void postMetric(TelemetryEdge.PostedMetric request,
-                           StreamObserver<TelemetryEdge.PostMetricResponse> responseObserver) {
+    public void postMetric(PostedMetric request,
+                           StreamObserver<PostMetricResponse> responseObserver) {
         final String envoyId = GrpcContextDetails.getCallerEnvoyId();
 
         messagesPost.increment();
         try {
             metricRouter.route(GrpcContextDetails.getCallerTenantId(), envoyId, request);
-            responseObserver.onNext(TelemetryEdge.PostMetricResponse.newBuilder().build());
+            responseObserver.onNext(PostMetricResponse.newBuilder().build());
             responseObserver.onCompleted();
         } catch (Exception e) {
             log.warn("Failed to route metric, notifying Envoy", e);
@@ -134,7 +147,23 @@ public class EnvoyAmbassadorService extends TelemetryAmbassadorGrpc.TelemetryAmb
     }
 
     @Override
-    public void keepAlive(TelemetryEdge.KeepAliveRequest request, StreamObserver<TelemetryEdge.KeepAliveResponse> responseObserver) {
+    public void postTestMonitorResults(TestMonitorResults results,
+                                       StreamObserver<PostTestMonitorResultsResponse> responseObserver) {
+
+        try {
+            testMonitorResultsProducer.send(results);
+        } catch (Exception e) {
+            log.warn("Failed to send test-monitor results", e);
+            // This one purposely doesn't notify the envoy since it was actually the ambassador
+            // that initiated the whole operation and the feedback loop would be strange.
+        } finally {
+            responseObserver.onNext(PostTestMonitorResultsResponse.newBuilder().build());
+            responseObserver.onCompleted();
+        }
+    }
+
+    @Override
+    public void keepAlive(KeepAliveRequest request, StreamObserver<KeepAliveResponse> responseObserver) {
         final SocketAddress remoteAddr = GrpcContextDetails.getCallerRemoteAddress();
         final String envoyId = GrpcContextDetails.getCallerEnvoyId();
 
@@ -142,7 +171,7 @@ public class EnvoyAmbassadorService extends TelemetryAmbassadorGrpc.TelemetryAmb
         log.trace("Processing keep alive for envoyId={}", envoyId);
 
         if (envoyRegistry.keepAlive(envoyId, remoteAddr)) {
-            responseObserver.onNext(TelemetryEdge.KeepAliveResponse.newBuilder().build());
+            responseObserver.onNext(KeepAliveResponse.newBuilder().build());
             responseObserver.onCompleted();
         } else {
             // Can happen just after ambassador restart when the envoy TCP connection is held
