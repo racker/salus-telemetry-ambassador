@@ -93,13 +93,13 @@ public class MonitorEventListenerTest {
         .setMonitorId(id1)
         .setResourceId("r-1")
         .setAgentType(AgentType.TELEGRAF)
-        .setResourceTenant("t-1")
+        .setTenantId("t-1")
         .setRenderedContent("content1"),
         new BoundMonitorDTO()
         .setMonitorId(id2)
         .setResourceId("r-2")
         .setAgentType(AgentType.FILEBEAT)
-        .setResourceTenant("t-2")
+        .setTenantId("t-2")
         .setRenderedContent("content2")
     );
 
