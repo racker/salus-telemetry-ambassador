@@ -20,7 +20,6 @@
 
   <include resource="org/springframework/boot/logging/logback/defaults.xml" />
   <include resource="org/springframework/boot/logging/logback/console-appender.xml" />
-  <include resource="logback-fluency.xml" />
 
   
   <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
@@ -31,6 +30,7 @@
 
   <root level="INFO">
     <springProfile name="production">
+      <include resource="logback-fluency.xml" />
       <appender-ref ref="FLUENCY" />
     </springProfile>
     <springProfile name="!production">
