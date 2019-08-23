@@ -68,6 +68,7 @@ public class ConfigInstructionsBuilder {
     if (isRemoteMonitor(boundMonitor)) {
       opBuilder.putExtraLabels(BoundMonitorUtils.LABEL_TARGET_TENANT, boundMonitor.getTenantId());
       opBuilder.putExtraLabels(BoundMonitorUtils.LABEL_RESOURCE, boundMonitor.getResourceId());
+      opBuilder.putExtraLabels(BoundMonitorUtils.LABEL_ZONE, boundMonitor.getZoneName());
     }
 
     return this;

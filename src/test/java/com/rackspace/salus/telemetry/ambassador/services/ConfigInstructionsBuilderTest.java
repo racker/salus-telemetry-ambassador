@@ -128,7 +128,8 @@ public class ConfigInstructionsBuilderTest {
     assertThat(telegrafConfig.getOperations(3).getExtraLabelsMap(), allOf(
         hasEntry(BoundMonitorUtils.LABEL_TARGET_TENANT, "t-1"),
         hasEntry(BoundMonitorUtils.LABEL_RESOURCE, "r-2"),
-        hasEntry(BoundMonitorUtils.LABEL_MONITOR_ID, "00000000-0000-0005-0000-000000000000")
+        hasEntry(BoundMonitorUtils.LABEL_MONITOR_ID, "00000000-0000-0005-0000-000000000000"),
+        hasEntry(BoundMonitorUtils.LABEL_ZONE, "z-1")
         )
     );
 
