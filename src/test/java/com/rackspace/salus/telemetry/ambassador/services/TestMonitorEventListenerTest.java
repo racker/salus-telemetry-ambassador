@@ -69,6 +69,7 @@ public class TestMonitorEventListenerTest {
             .setEnvoyId("e-1")
             .setAgentType(AgentType.TELEGRAF)
             .setRenderedContent("content-1")
+            .setTimeout(3L)
     );
 
     // VERIFY
@@ -79,6 +80,7 @@ public class TestMonitorEventListenerTest {
       assertThat(envoyInstruction.getTestMonitor()).isNotNull();
       assertThat(envoyInstruction.getTestMonitor().getCorrelationId()).isEqualTo("id-1");
       assertThat(envoyInstruction.getTestMonitor().getContent()).isEqualTo("content-1");
+      assertThat(envoyInstruction.getTestMonitor().getTimeout()).isEqualTo(3L);
       assertThat(envoyInstruction.getTestMonitor().getAgentType())
           .isEqualTo(TelemetryEdge.AgentType.TELEGRAF);
 

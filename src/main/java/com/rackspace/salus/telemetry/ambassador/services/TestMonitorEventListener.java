@@ -74,6 +74,7 @@ public class TestMonitorEventListener {
                 .setAgentType(TelemetryEdge.AgentType.valueOf(event.getAgentType().name()))
                 .setCorrelationId(event.getCorrelationId())
                 .setContent(event.getRenderedContent())
+                .setTimeout(event.getTimeout())
         )
         .build();
     envoyRegistry.sendInstruction(envoyId, testMonitorInstruction);
