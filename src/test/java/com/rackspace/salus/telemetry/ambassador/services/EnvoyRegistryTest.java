@@ -19,7 +19,9 @@ package com.rackspace.salus.telemetry.ambassador.services;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.hasKey;
 import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.nullValue;
 import static org.junit.Assert.assertThat;
@@ -49,6 +51,7 @@ import io.grpc.StatusException;
 import io.grpc.stub.StreamObserver;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.net.InetSocketAddress;
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -61,23 +64,24 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.json.JsonTest;
+import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.context.annotation.Import;
-import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.support.SendResult;
+import org.springframework.test.annotation.DirtiesContext;
+import org.springframework.test.annotation.DirtiesContext.ClassMode;
 import org.springframework.test.context.junit4.SpringRunner;
 import org.springframework.util.concurrent.CompletableToListenableFutureAdapter;
 import org.springframework.util.concurrent.ListenableFuture;
 
 @RunWith(SpringRunner.class)
-@JsonTest
-@Import({
+@SpringBootTest(classes = {
     EnvoyRegistry.class,
     AmbassadorProperties.class,
     GrpcConfig.class,
     SimpleMeterRegistry.class
 })
+// since a lot of the tests are about manipulating the state tracking in EnvoyRegistry
+@DirtiesContext(classMode = ClassMode.AFTER_EACH_TEST_METHOD)
 public class EnvoyRegistryTest {
 
   @MockBean
@@ -90,7 +94,7 @@ public class EnvoyRegistryTest {
   ZoneAuthorizer zoneAuthorizer;
 
   @MockBean
-  KafkaTemplate kafkaTemplate;
+  EventProducer eventProducer;
 
   @MockBean
   ZoneStorage zoneStorage;
@@ -104,6 +108,7 @@ public class EnvoyRegistryTest {
   @Autowired
   EnvoyRegistry envoyRegistry;
 
+  @SuppressWarnings("unchecked")
   @Test
   public void postsAttachEventOnAttach() throws StatusException {
     final EnvoySummary envoySummary = EnvoySummary.newBuilder()
@@ -125,17 +130,15 @@ public class EnvoyRegistryTest {
     SendResult sendResult = new SendResult(null, recordMetadata);
     ListenableFuture lf = new CompletableToListenableFutureAdapter(
         CompletableFuture.completedFuture(sendResult));
-    when(kafkaTemplate.send(anyString(), anyString(), any()))
+    when(eventProducer.sendAttach(any()))
         .thenReturn(lf);
 
     envoyRegistry.attach("t-1", "e-1", envoySummary,
         InetSocketAddress.createUnresolved("localhost", 60000), streamObserver
     ).join();
 
-    verify(kafkaTemplate)
-        .send(
-            "telemetry.attaches.json",
-            "t-1:hostname:test-host",
+    verify(eventProducer)
+        .sendAttach(
             new AttachEvent()
                 .setResourceId("hostname:test-host")
                 .setLabels(Collections.singletonMap("agent_discovered_os", "linux"))
@@ -145,6 +148,7 @@ public class EnvoyRegistryTest {
         );
   }
 
+  @SuppressWarnings("unchecked")
   @Test
   public void storesZoneOnAttach() throws StatusException, ZoneNotAuthorizedException {
     final EnvoySummary envoySummary = EnvoySummary.newBuilder()
@@ -174,7 +178,7 @@ public class EnvoyRegistryTest {
     SendResult sendResult = new SendResult(null, recordMetadata);
     ListenableFuture lf = new CompletableToListenableFutureAdapter(
         CompletableFuture.completedFuture(sendResult));
-    when(kafkaTemplate.send(anyString(), anyString(), any()))
+    when(eventProducer.sendAttach(any()))
         .thenReturn(lf);
 
 
@@ -186,10 +190,8 @@ public class EnvoyRegistryTest {
 
     verify(zoneStorage).registerEnvoyInZone(resolvedZone, "e-1", "hostname:test-host", 1234L);
 
-    verify(kafkaTemplate)
-        .send(
-            "telemetry.attaches.json",
-            "t-1:hostname:test-host",
+    verify(eventProducer)
+        .sendAttach(
             new AttachEvent()
                 .setResourceId("hostname:test-host")
                 .setLabels(Collections.singletonMap("agent_discovered_os", "linux"))
@@ -198,11 +200,12 @@ public class EnvoyRegistryTest {
                 .setEnvoyAddress("localhost")
         );
 
-    verifyNoMoreInteractions(kafkaTemplate, zoneAuthorizer, zoneStorage, resourceLabelsService);
+    verifyNoMoreInteractions(eventProducer, zoneAuthorizer, zoneStorage, resourceLabelsService);
   }
 
+  @SuppressWarnings("unchecked")
   @Test
-  public void storesEnvoyResourceOnAttach() throws StatusException, ZoneNotAuthorizedException {
+  public void storesEnvoyResourceOnAttach() throws StatusException {
     final EnvoySummary envoySummary = EnvoySummary.newBuilder()
         .setResourceId("hostname:test-host")
         .putLabels("discovered_os", "linux")
@@ -222,7 +225,7 @@ public class EnvoyRegistryTest {
     SendResult sendResult = new SendResult(null, recordMetadata);
     ListenableFuture lf = new CompletableToListenableFutureAdapter(
         CompletableFuture.completedFuture(sendResult));
-    when(kafkaTemplate.send(anyString(), anyString(), any()))
+    when(eventProducer.sendAttach(any()))
         .thenReturn(lf);
 
     // EXECUTE
@@ -238,10 +241,8 @@ public class EnvoyRegistryTest {
     assertThat(envoyRegistry.containsEnvoyResource("hostname:test-host"), equalTo(true));
     assertThat(envoyRegistry.getEnvoyIdByResource("hostname:test-host"), equalTo("e-1"));
 
-    verify(kafkaTemplate)
-        .send(
-            "telemetry.attaches.json",
-            "t-1:hostname:test-host",
+    verify(eventProducer)
+        .sendAttach(
             new AttachEvent()
                 .setResourceId("hostname:test-host")
                 .setLabels(Collections.singletonMap("agent_discovered_os", "linux"))
@@ -250,7 +251,7 @@ public class EnvoyRegistryTest {
                 .setEnvoyAddress("localhost")
         );
 
-    verifyNoMoreInteractions(kafkaTemplate, zoneAuthorizer, zoneStorage, resourceLabelsService);
+    verifyNoMoreInteractions(eventProducer, zoneAuthorizer, zoneStorage, resourceLabelsService);
   }
 
   @Test(expected = StatusException.class)
@@ -413,6 +414,67 @@ public class EnvoyRegistryTest {
     verify(resourceLabelsService).trackResource("t-1", "r-4");
     verify(resourceLabelsService).trackResource("t-1", "r-5");
     verify(resourceLabelsService).releaseResource("t-1", "r-2");
+
+    verifyNoMoreInteractions(resourceLabelsService);
+  }
+
+  @Test
+  public void testApplyBoundMonitors_onlyIntervalChanged() {
+    envoyRegistry.createTestingEntry("e-1");
+
+    final UUID id1 = UUID.fromString("00000000-0000-0000-0001-000000000000");
+    final Duration initialInterval = Duration.ofSeconds(1);
+    final Duration updatedInterval = Duration.ofSeconds(2);
+    final String renderedContent = "{\"instance\":1, \"state\":1}";
+
+    // baseline bound monitors
+    {
+      final List<BoundMonitorDTO> boundMonitors = List.of(
+          new BoundMonitorDTO()
+              .setMonitorId(id1)
+              .setTenantId("t-1")
+              .setResourceId("r-1")
+              .setInterval(initialInterval)
+              .setRenderedContent(renderedContent)
+      );
+
+      final Map<OperationType, List<BoundMonitorDTO>> changes = envoyRegistry
+          .applyBoundMonitors("e-1", boundMonitors);
+
+      assertThat(changes, notNullValue());
+      assertThat(changes.get(OperationType.CREATE), hasSize(1));
+    }
+
+    // Exercise interval change
+    {
+      final List<BoundMonitorDTO> boundMonitors = List.of(
+          new BoundMonitorDTO()
+              .setMonitorId(id1)
+              .setTenantId("t-1")
+              .setResourceId("r-1")
+              // updated interval only
+              .setInterval(updatedInterval)
+              // content stays the same
+              .setRenderedContent(renderedContent)
+      );
+
+      final Map<OperationType, List<BoundMonitorDTO>> changes = envoyRegistry
+          .applyBoundMonitors("e-1", boundMonitors);
+
+      assertThat(changes, notNullValue());
+      assertThat(changes, not(hasKey(OperationType.CREATE)));
+      assertThat(changes.get(OperationType.UPDATE), contains(
+          new BoundMonitorDTO()
+              .setMonitorId(id1)
+              .setTenantId("t-1")
+              .setResourceId("r-1")
+              .setInterval(updatedInterval)
+              .setRenderedContent(renderedContent)
+      ));
+      assertThat(changes, not(hasKey(OperationType.DELETE)));
+    }
+
+    verify(resourceLabelsService).trackResource("t-1", "r-1");
 
     verifyNoMoreInteractions(resourceLabelsService);
   }

@@ -25,10 +25,12 @@ import com.rackspace.salus.services.TelemetryEdge.EnvoyInstructionConfigure;
 import com.rackspace.salus.services.TelemetryEdge.EnvoyInstructionConfigure.Builder;
 import com.rackspace.salus.telemetry.messaging.OperationType;
 import com.rackspace.salus.telemetry.model.AgentType;
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.stream.Collectors;
+import javax.annotation.Nullable;
 import org.springframework.util.StringUtils;
 
 /**
@@ -61,7 +63,8 @@ public class ConfigInstructionsBuilder {
     final ConfigurationOp.Builder opBuilder = builder.addOperationsBuilder()
         .setId(BoundMonitorUtils.buildConfiguredMonitorId(boundMonitor))
         .setType(convertOpType(operationType))
-        .setContent(boundMonitor.getRenderedContent());
+        .setContent(boundMonitor.getRenderedContent())
+        .setInterval(convertIntervalToSeconds(boundMonitor.getInterval()));
 
     opBuilder.putExtraLabels(BoundMonitorUtils.LABEL_MONITOR_ID, boundMonitor.getMonitorId().toString());
 
@@ -72,6 +75,10 @@ public class ConfigInstructionsBuilder {
     }
 
     return this;
+  }
+
+  static long convertIntervalToSeconds(@Nullable Duration interval) {
+    return interval != null ? interval.toSeconds() : 0;
   }
 
   private boolean isRemoteMonitor(BoundMonitorDTO boundMonitor) {
