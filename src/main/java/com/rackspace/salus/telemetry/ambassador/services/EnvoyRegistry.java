@@ -16,14 +16,13 @@
 
 package com.rackspace.salus.telemetry.ambassador.services;
 
-import static com.rackspace.salus.common.messaging.KafkaMessageKeyBuilder.buildMessageKey;
+import static com.rackspace.salus.telemetry.ambassador.services.ConfigInstructionsBuilder.convertIntervalToSeconds;
 import static com.rackspace.salus.telemetry.model.LabelNamespaces.applyNamespace;
 import static java.util.Collections.emptyList;
 
 import com.google.common.hash.HashCode;
 import com.google.common.hash.HashFunction;
 import com.google.common.hash.Hashing;
-import com.rackspace.salus.common.messaging.KafkaTopicProperties;
 import com.rackspace.salus.monitor_management.web.model.BoundMonitorDTO;
 import com.rackspace.salus.services.TelemetryEdge;
 import com.rackspace.salus.services.TelemetryEdge.EnvoyInstruction;
@@ -62,25 +61,22 @@ import java.util.stream.Collectors;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.support.SendResult;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
-import org.springframework.util.concurrent.ListenableFuture;
 
 @Service
 @Slf4j
 public class EnvoyRegistry {
 
   private final AmbassadorProperties appProperties;
-  private final KafkaTopicProperties kafkaTopics;
+  private final EventProducer eventProducer;
   private final EnvoyLeaseTracking envoyLeaseTracking;
   private final EnvoyResourceManagement envoyResourceManagement;
   private final ResourceLabelsService resourceLabelsService;
   private final ZoneAuthorizer zoneAuthorizer;
   private final ZoneStorage zoneStorage;
-  private final KafkaTemplate<String, Object> kafkaTemplate;
   private final Counter unauthorizedZoneCounter;
   private final HashFunction boundMonitorHashFunction;
   private ConcurrentHashMap<String, EnvoyEntry> envoys = new ConcurrentHashMap<>();
@@ -89,22 +85,20 @@ public class EnvoyRegistry {
   @SuppressWarnings("SpringJavaInjectionPointsAutowiringInspection")
   @Autowired
   public EnvoyRegistry(AmbassadorProperties appProperties,
-      KafkaTopicProperties kafkaTopics,
+      EventProducer eventProducer,
       EnvoyLeaseTracking envoyLeaseTracking,
       EnvoyResourceManagement envoyResourceManagement,
       ResourceLabelsService resourceLabelsService,
       ZoneAuthorizer zoneAuthorizer,
       ZoneStorage zoneStorage,
-      KafkaTemplate<String, Object> kafkaTemplate,
       MeterRegistry meterRegistry) {
     this.appProperties = appProperties;
-    this.kafkaTopics = kafkaTopics;
+    this.eventProducer = eventProducer;
     this.envoyLeaseTracking = envoyLeaseTracking;
     this.envoyResourceManagement = envoyResourceManagement;
     this.resourceLabelsService = resourceLabelsService;
     this.zoneAuthorizer = zoneAuthorizer;
     this.zoneStorage = zoneStorage;
-    this.kafkaTemplate = kafkaTemplate;
     this.boundMonitorHashFunction = Hashing.adler32();
 
     unauthorizedZoneCounter = meterRegistry.counter("attachErrors", "type", "unauthorizedZone");
@@ -244,14 +238,8 @@ public class EnvoyRegistry {
         .setEnvoyAddress(((InetSocketAddress) remoteAddr).getHostString())
         .setLabels(envoyLabels);
 
-    final ListenableFuture<SendResult<String, Object>> sendResultFuture;
-    sendResultFuture = kafkaTemplate.send(
-        kafkaTopics.getAttaches(),
-        buildMessageKey(attachEvent),
-        attachEvent
-    );
-
-    return sendResultFuture.completable();
+    return eventProducer.sendAttach(attachEvent)
+        .completable();
   }
 
   public boolean keepAlive(String instanceId, SocketAddress remoteAddr) {
@@ -387,7 +375,7 @@ public class EnvoyRegistry {
           bindings.put(
               monitorId,
               new BoundMonitorEntry(
-                  hashRenderedContent(boundMonitor), boundMonitor.getAgentType(),
+                  hashUpdatableFields(boundMonitor), boundMonitor.getAgentType(),
                   boundMonitor.getMonitorId(),
                   boundMonitor.getTenantId(), boundMonitor.getResourceId()
               )
@@ -395,15 +383,15 @@ public class EnvoyRegistry {
         } else {
           // Possibly modified
 
-          final HashCode newHashCode = hashRenderedContent(boundMonitor);
+          final HashCode newHashCode = hashUpdatableFields(boundMonitor);
 
-          if (!newHashCode.equals(prevEntry.getHashCode())) {
+          if (!newHashCode.equals(prevEntry.getUpdatableFieldsHash())) {
             // UPDATED
             getOrCreate(changes, OperationType.UPDATE).add(boundMonitor);
             bindings.put(
                 monitorId,
                 new BoundMonitorEntry(
-                    hashRenderedContent(boundMonitor), boundMonitor.getAgentType(),
+                    hashUpdatableFields(boundMonitor), boundMonitor.getAgentType(),
                     boundMonitor.getMonitorId(),
                     boundMonitor.getTenantId(), boundMonitor.getResourceId()
                 )
@@ -457,11 +445,17 @@ public class EnvoyRegistry {
         });
   }
 
+  /**
+   * Hashes the fields of the bound monitor that need to be detected for updates. This is a
+   * cpu-memory tradeoff to avoid storing fields of the bound monitor into {@link BoundMonitorEntry}
+   * where only the change in value matters.
+   */
   @SuppressWarnings("UnstableApiUsage")
-  private HashCode hashRenderedContent(BoundMonitorDTO boundMonitor) {
-    return boundMonitorHashFunction.hashString(boundMonitor.getRenderedContent(),
-        StandardCharsets.UTF_8
-    );
+  private HashCode hashUpdatableFields(BoundMonitorDTO boundMonitor) {
+    return boundMonitorHashFunction.newHasher()
+        .putString(boundMonitor.getRenderedContent(), StandardCharsets.UTF_8)
+        .putLong(convertIntervalToSeconds(boundMonitor.getInterval()))
+        .hash();
   }
 
   @Data
@@ -483,9 +477,10 @@ public class EnvoyRegistry {
   static class BoundMonitorEntry {
 
     /**
-     * Hash of the rendered bound monitor content. Used to detect updates to existing monitor.
+     * Hash of the fields that need to trigger an update operation when they change.
      */
-    final HashCode hashCode;
+    @SuppressWarnings("UnstableApiUsage")
+    final HashCode updatableFieldsHash;
     /**
      * agentType is needed to handle deletion of entries.
      */
