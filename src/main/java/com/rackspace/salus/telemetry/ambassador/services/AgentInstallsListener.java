@@ -24,7 +24,6 @@ import com.rackspace.salus.services.TelemetryEdge;
 import com.rackspace.salus.telemetry.messaging.AgentInstallChangeEvent;
 import com.rackspace.salus.telemetry.messaging.OperationType;
 import com.rackspace.salus.telemetry.model.AgentType;
-import java.util.HashMap;
 import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.common.TopicPartition;
@@ -128,7 +127,7 @@ public class AgentInstallsListener implements ConsumerSeekAware {
     final String envoyId = envoyRegistry.getEnvoyIdByResource(event.getResourceId());
     if (envoyId != null) {
       if (envoyRegistry.sendInstruction(envoyId, instruction)) {
-        final HashMap<AgentType, String> installedVersions = envoyRegistry
+        final Map<AgentType, String> installedVersions = envoyRegistry
             .trackAgentInstall(envoyId, agentType, agentVersion);
 
         monitorBindingService.processEnvoy(envoyId, installedVersions);

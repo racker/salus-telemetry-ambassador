@@ -467,7 +467,7 @@ public class EnvoyRegistry {
         .hash();
   }
 
-  public HashMap<AgentType, String> trackAgentInstall(String envoyInstanceId, AgentType agentType, String agentVersion) {
+  public Map<AgentType, String> trackAgentInstall(String envoyInstanceId, AgentType agentType, String agentVersion) {
     final EnvoyEntry envoyEntry = envoys.get(envoyInstanceId);
 
     if (envoyEntry != null) {
