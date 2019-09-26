@@ -28,7 +28,6 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import com.rackspace.salus.common.messaging.KafkaTopicProperties;
-import com.rackspace.salus.monitor_management.web.client.MonitorApi;
 import com.rackspace.salus.monitor_management.web.model.BoundMonitorDTO;
 import com.rackspace.salus.resource_management.web.client.ResourceApi;
 import com.rackspace.salus.services.TelemetryEdge;
@@ -66,11 +65,11 @@ public class MonitorEventListenerTest {
   @Mock
   EnvoyRegistry envoyRegistry;
 
-  @Mock
-  MonitorApi monitorApi;
-
   @MockBean
   ResourceApi resourceApi;
+
+  @MockBean
+  MonitorBindingService monitorBindingService;
 
   @Captor
   ArgumentCaptor<EnvoyInstruction> envoyInstructionArg;
@@ -79,7 +78,8 @@ public class MonitorEventListenerTest {
 
   @Before
   public void setUp() throws Exception {
-    monitorEventListener = new MonitorEventListener(new KafkaTopicProperties(), envoyRegistry, monitorApi, "host-0");
+    monitorEventListener = new MonitorEventListener(new KafkaTopicProperties(), envoyRegistry,
+        monitorBindingService, "test-host");
   }
 
   @Test
@@ -103,9 +103,6 @@ public class MonitorEventListenerTest {
         .setRenderedContent("content2")
     );
 
-    when(monitorApi.getBoundMonitors(any()))
-        .thenReturn(boundMonitors);
-
     when(envoyRegistry.contains("e-1"))
         .thenReturn(true);
 
@@ -120,7 +117,7 @@ public class MonitorEventListenerTest {
 
     monitorEventListener.handleMessage(event);
 
-    verify(monitorApi).getBoundMonitors("e-1");
+    verify(monitorBindingService).processEnvoy("e-1");
 
     verify(envoyRegistry).contains("e-1");
 
@@ -142,6 +139,6 @@ public class MonitorEventListenerTest {
     assertThat(configure1.getOperationsList(), hasSize(1));
     assertThat(configure1.getOperations(0).getId(), equalTo(id2.toString()+"_r-2"));
 
-    verifyNoMoreInteractions(envoyRegistry, monitorApi);
+    verifyNoMoreInteractions(envoyRegistry, monitorBindingService);
   }
 }

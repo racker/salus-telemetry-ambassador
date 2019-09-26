@@ -39,7 +39,17 @@ import org.springframework.util.StringUtils;
  */
 public class ConfigInstructionsBuilder {
 
+  public static final String LABEL_TARGET_TENANT = "target_tenant";
+  public static final String LABEL_RESOURCE = "resource_id";
+  public static final String LABEL_MONITOR_ID = "monitor_id";
+  public static final String LABEL_ZONE = "monitoring_zone";
   private HashMap<AgentType, EnvoyInstructionConfigure.Builder> buildersByAgentType = new LinkedHashMap<>();
+
+  public static String buildConfiguredMonitorId(BoundMonitorDTO boundMonitor) {
+    // don't need to qualify resource ID by resource tenant since monitor ID is already distinct
+    // enough and already a per-tenant object
+    return String.join("_", boundMonitor.getMonitorId().toString(), boundMonitor.getResourceId());
+  }
 
   public List<EnvoyInstruction> build() {
     return buildersByAgentType.values().stream()
@@ -61,17 +71,17 @@ public class ConfigInstructionsBuilder {
     );
 
     final ConfigurationOp.Builder opBuilder = builder.addOperationsBuilder()
-        .setId(BoundMonitorUtils.buildConfiguredMonitorId(boundMonitor))
+        .setId(buildConfiguredMonitorId(boundMonitor))
         .setType(convertOpType(operationType))
         .setContent(boundMonitor.getRenderedContent())
         .setInterval(convertIntervalToSeconds(boundMonitor.getInterval()));
 
-    opBuilder.putExtraLabels(BoundMonitorUtils.LABEL_MONITOR_ID, boundMonitor.getMonitorId().toString());
+    opBuilder.putExtraLabels(LABEL_MONITOR_ID, boundMonitor.getMonitorId().toString());
 
     if (isRemoteMonitor(boundMonitor)) {
-      opBuilder.putExtraLabels(BoundMonitorUtils.LABEL_TARGET_TENANT, boundMonitor.getTenantId());
-      opBuilder.putExtraLabels(BoundMonitorUtils.LABEL_RESOURCE, boundMonitor.getResourceId());
-      opBuilder.putExtraLabels(BoundMonitorUtils.LABEL_ZONE, boundMonitor.getZoneName());
+      opBuilder.putExtraLabels(LABEL_TARGET_TENANT, boundMonitor.getTenantId());
+      opBuilder.putExtraLabels(LABEL_RESOURCE, boundMonitor.getResourceId());
+      opBuilder.putExtraLabels(LABEL_ZONE, boundMonitor.getZoneName());
     }
 
     return this;

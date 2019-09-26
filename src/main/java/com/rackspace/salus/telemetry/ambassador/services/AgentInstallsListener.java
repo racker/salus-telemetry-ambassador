@@ -23,6 +23,8 @@ import com.rackspace.salus.common.messaging.KafkaTopicProperties;
 import com.rackspace.salus.services.TelemetryEdge;
 import com.rackspace.salus.telemetry.messaging.AgentInstallChangeEvent;
 import com.rackspace.salus.telemetry.messaging.OperationType;
+import com.rackspace.salus.telemetry.model.AgentType;
+import java.util.HashMap;
 import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.common.TopicPartition;
@@ -39,6 +41,7 @@ public class AgentInstallsListener implements ConsumerSeekAware {
 
   private final RetryTemplate retryTemplate;
   private final EnvoyRegistry envoyRegistry;
+  private final MonitorBindingService monitorBindingService;
   private final AgentInstallApi agentInstallApi;
   private final KafkaTopicProperties kafkaTopicProperties;
   private final String ourHostName;
@@ -46,11 +49,13 @@ public class AgentInstallsListener implements ConsumerSeekAware {
   @Autowired
   public AgentInstallsListener(RetryTemplate retryTemplate,
                                EnvoyRegistry envoyRegistry,
+                               MonitorBindingService monitorBindingService,
                                AgentInstallApi agentInstallApi,
                                KafkaTopicProperties kafkaTopicProperties,
                                @Value("${localhost.name}") String ourHostName) {
     this.retryTemplate = retryTemplate;
     this.envoyRegistry = envoyRegistry;
+    this.monitorBindingService = monitorBindingService;
     this.agentInstallApi = agentInstallApi;
     this.kafkaTopicProperties = kafkaTopicProperties;
     this.ourHostName = ourHostName;
@@ -105,21 +110,29 @@ public class AgentInstallsListener implements ConsumerSeekAware {
 
     final AgentReleaseDTO agentRelease = binding.getAgentInstall().getAgentRelease();
 
+    final AgentType agentType = agentRelease.getType();
+    final String agentVersion = agentRelease.getVersion();
+
     final TelemetryEdge.EnvoyInstruction instruction = TelemetryEdge.EnvoyInstruction.newBuilder()
         .setInstall(
             TelemetryEdge.EnvoyInstructionInstall.newBuilder()
                 .setUrl(agentRelease.getUrl())
                 .setExe(agentRelease.getExe())
                 .setAgent(TelemetryEdge.Agent.newBuilder()
-                    .setType(TelemetryEdge.AgentType.valueOf(agentRelease.getType().name()))
-                    .setVersion(agentRelease.getVersion())
+                    .setType(TelemetryEdge.AgentType.valueOf(agentType.name()))
+                    .setVersion(agentVersion)
                     .build())
         )
         .build();
 
     final String envoyId = envoyRegistry.getEnvoyIdByResource(event.getResourceId());
     if (envoyId != null) {
-      envoyRegistry.sendInstruction(envoyId, instruction);
+      if (envoyRegistry.sendInstruction(envoyId, instruction)) {
+        final HashMap<AgentType, String> installedVersions = envoyRegistry
+            .trackAgentInstall(envoyId, agentType, agentVersion);
+
+        monitorBindingService.processEnvoy(envoyId, installedVersions);
+      }
     } else {
       log.warn(
           "Unable to locate envoyId for resourceId={} when processing agent install event",

@@ -85,7 +85,7 @@ public class MetricRouter {
         // measurement is not necessarily owned by the tenant of the monitor nor running on the
         // resource of the monitor.
 
-        String resourceId = tagsMap.remove(BoundMonitorUtils.LABEL_RESOURCE);
+        String resourceId = tagsMap.remove(ConfigInstructionsBuilder.LABEL_RESOURCE);
         if (resourceId == null) {
             resourceId = envoyRegistry.getResourceId(envoyId);
 
@@ -97,7 +97,7 @@ public class MetricRouter {
             }
         }
 
-        final String taggedTargetTenant = tagsMap.remove(BoundMonitorUtils.LABEL_TARGET_TENANT);
+        final String taggedTargetTenant = tagsMap.remove(ConfigInstructionsBuilder.LABEL_TARGET_TENANT);
         if (taggedTargetTenant != null) {
             tenantId = taggedTargetTenant;
         }
