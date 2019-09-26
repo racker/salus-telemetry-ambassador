@@ -130,7 +130,14 @@ public class AgentInstallsListener implements ConsumerSeekAware {
         final Map<AgentType, String> installedVersions = envoyRegistry
             .trackAgentInstall(envoyId, agentType, agentVersion);
 
+        // Re-process bindings since the agent version may have been upgraded such that the
+        // applicable translations might have changed.
         monitorBindingService.processEnvoy(envoyId, installedVersions);
+      } else {
+        log.warn("Unable to send agent install instruction to envoy={}", envoyId);
+        // It's hard to do anything else to recover, but most likely cause is a networking
+        // issues which would lead to an Envoy disconnect and reattachment anyway. At that
+        // point the slate is wiped clean and repopulated via normal processing.
       }
     } else {
       log.warn(
