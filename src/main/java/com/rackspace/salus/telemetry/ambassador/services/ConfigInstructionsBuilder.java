@@ -46,9 +46,10 @@ public class ConfigInstructionsBuilder {
   private HashMap<AgentType, EnvoyInstructionConfigure.Builder> buildersByAgentType = new LinkedHashMap<>();
 
   public static String buildConfiguredMonitorId(BoundMonitorDTO boundMonitor) {
-    // don't need to qualify resource ID by resource tenant since monitor ID is already distinct
-    // enough and already a per-tenant object
-    return String.join("_", boundMonitor.getMonitorId().toString(), boundMonitor.getResourceId());
+    return String.join("_",
+        boundMonitor.getTenantId(),
+        boundMonitor.getMonitorId().toString(),
+        boundMonitor.getResourceId());
   }
 
   public List<EnvoyInstruction> build() {

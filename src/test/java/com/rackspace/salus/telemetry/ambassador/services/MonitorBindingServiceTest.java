@@ -116,14 +116,16 @@ public class MonitorBindingServiceTest {
     assertThat(configure0, notNullValue());
     assertThat(configure0.getAgentType(), equalTo(TelemetryEdge.AgentType.TELEGRAF));
     assertThat(configure0.getOperationsList(), hasSize(1));
-    assertThat(configure0.getOperations(0).getId(), equalTo(id1.toString()+"_r-1"));
+    assertThat(configure0.getOperations(0).getId(), equalTo(
+        String.format("t-1_%s_r-1", id1.toString())));
 
     final EnvoyInstructionConfigure configure1 = envoyInstructionArg.getAllValues().get(1)
         .getConfigure();
     assertThat(configure1, notNullValue());
     assertThat(configure1.getAgentType(), equalTo(TelemetryEdge.AgentType.FILEBEAT));
     assertThat(configure1.getOperationsList(), hasSize(1));
-    assertThat(configure1.getOperations(0).getId(), equalTo(id2.toString()+"_r-2"));
+    assertThat(configure1.getOperations(0).getId(), equalTo(
+        String.format("t-2_%s_r-2", id2.toString())));
 
     verifyNoMoreInteractions(envoyRegistry, monitorApi);
 
