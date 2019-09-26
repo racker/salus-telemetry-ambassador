@@ -52,7 +52,8 @@ import org.springframework.test.context.junit4.SpringRunner;
 @SpringBootTest(classes = {
     AgentInstallsListener.class,
     KafkaTopicProperties.class,
-    AgentInstallsListenerTest.TestConfig.class
+    AgentInstallsListenerTest.TestConfig.class,
+    MeterRegistryTestConfig.class
 }, properties = {
     "localhost.name=test-host"
 })

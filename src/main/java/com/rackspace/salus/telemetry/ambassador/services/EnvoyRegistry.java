@@ -78,6 +78,8 @@ public class EnvoyRegistry {
   private final ZoneAuthorizer zoneAuthorizer;
   private final ZoneStorage zoneStorage;
   private final Counter unauthorizedZoneCounter;
+  private final Counter instructionsSentSuccessful;
+  private final Counter instructionsSentFailed;
   private final HashFunction boundMonitorHashFunction;
   private ConcurrentHashMap<String, EnvoyEntry> envoys = new ConcurrentHashMap<>();
   private ConcurrentHashMap<String, EnvoyEntry> envoysByResourceId = new ConcurrentHashMap<>();
@@ -102,6 +104,8 @@ public class EnvoyRegistry {
     this.boundMonitorHashFunction = Hashing.adler32();
 
     unauthorizedZoneCounter = meterRegistry.counter("attachErrors", "type", "unauthorizedZone");
+    instructionsSentSuccessful = meterRegistry.counter("instructionsSent", "status", "success");
+    instructionsSentFailed = meterRegistry.counter("instructionsSent", "status", "failed");
   }
 
   private static <K, V> List<V> getOrCreate(HashMap<K, List<V>> map, K key) {
@@ -326,6 +330,7 @@ public class EnvoyRegistry {
       try {
         synchronized (envoyEntry.instructionStream) {
           envoyEntry.instructionStream.onNext(instruction);
+          instructionsSentSuccessful.increment();
           return true;
         }
       } catch (StatusRuntimeException e) {
@@ -336,6 +341,7 @@ public class EnvoyRegistry {
           envoyInstanceId, instruction);
     }
 
+    instructionsSentFailed.increment();
     return false;
   }
 

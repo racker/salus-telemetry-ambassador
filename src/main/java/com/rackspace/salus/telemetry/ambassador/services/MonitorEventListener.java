@@ -18,6 +18,8 @@ package com.rackspace.salus.telemetry.ambassador.services;
 
 import com.rackspace.salus.common.messaging.KafkaTopicProperties;
 import com.rackspace.salus.telemetry.messaging.MonitorBoundEvent;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.common.TopicPartition;
@@ -35,16 +37,20 @@ public class MonitorEventListener implements ConsumerSeekAware {
   private final MonitorBindingService monitorBindingService;
   private final EnvoyRegistry envoyRegistry;
   private final String ourHostName;
+  private final Counter eventsConsumed;
 
   @Autowired
   public MonitorEventListener(KafkaTopicProperties kafkaTopicProperties,
                               EnvoyRegistry envoyRegistry,
                               MonitorBindingService monitorBindingService,
+                              MeterRegistry meterRegistry,
                               @Value("${localhost.name}") String ourHostName) {
     this.topic = kafkaTopicProperties.getMonitors();
     this.monitorBindingService = monitorBindingService;
     this.envoyRegistry = envoyRegistry;
     this.ourHostName = ourHostName;
+
+    eventsConsumed = meterRegistry.counter("eventsConsumed", "type", "MonitorBoundEvent");
   }
 
   @SuppressWarnings("unused") // used in SpEL
@@ -65,6 +71,8 @@ public class MonitorEventListener implements ConsumerSeekAware {
       log.trace("Discarded monitorEvent={} for unregistered Envoy", event);
       return;
     }
+
+    eventsConsumed.increment();
 
     log.debug("Handling monitorBoundEvent={}", event);
 

@@ -16,36 +16,30 @@
 
 package com.rackspace.salus.telemetry.ambassador.services;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import com.rackspace.salus.common.messaging.KafkaTopicProperties;
 import com.rackspace.salus.resource_management.web.client.ResourceApi;
-import com.rackspace.salus.services.TelemetryEdge.EnvoyInstruction;
 import com.rackspace.salus.telemetry.messaging.MonitorBoundEvent;
-import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.mockito.ArgumentCaptor;
-import org.mockito.Captor;
-import org.mockito.Mock;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.test.annotation.DirtiesContext;
-import org.springframework.test.annotation.DirtiesContext.ClassMode;
-import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringRunner;
 
 @RunWith(SpringRunner.class)
-@DirtiesContext(classMode = ClassMode.AFTER_EACH_TEST_METHOD)
-@ContextConfiguration(classes = {
-    ResourceLabelsService.class,
+@SpringBootTest(classes = {
+    MonitorEventListener.class,
     KafkaTopicProperties.class,
-    ResourceLabelsServiceTest.TestConfig.class
-})
+    MeterRegistryTestConfig.class
+}, properties = {"localhost.name=test-host"})
 public class MonitorEventListenerTest {
 
-  @Mock
+  @MockBean
   EnvoyRegistry envoyRegistry;
 
   @MockBean
@@ -54,19 +48,11 @@ public class MonitorEventListenerTest {
   @MockBean
   MonitorBindingService monitorBindingService;
 
-  @Captor
-  ArgumentCaptor<EnvoyInstruction> envoyInstructionArg;
-
-  private MonitorEventListener monitorEventListener;
-
-  @Before
-  public void setUp() throws Exception {
-    monitorEventListener = new MonitorEventListener(new KafkaTopicProperties(), envoyRegistry,
-        monitorBindingService, "test-host");
-  }
+  @Autowired
+  MonitorEventListener monitorEventListener;
 
   @Test
-  public void handleMessage() {
+  public void testHandleMessage() {
 
     when(envoyRegistry.contains("e-1"))
         .thenReturn(true);
@@ -81,5 +67,10 @@ public class MonitorEventListenerTest {
     verify(envoyRegistry).contains("e-1");
 
     verifyNoMoreInteractions(envoyRegistry, monitorBindingService);
+  }
+
+  @Test
+  public void testGroupId() {
+    assertThat(monitorEventListener.getGroupId()).isEqualTo("ambassador-monitors-test-host");
   }
 }

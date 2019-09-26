@@ -24,6 +24,8 @@ import com.rackspace.salus.services.TelemetryEdge;
 import com.rackspace.salus.telemetry.messaging.AgentInstallChangeEvent;
 import com.rackspace.salus.telemetry.messaging.OperationType;
 import com.rackspace.salus.telemetry.model.AgentType;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.common.TopicPartition;
@@ -44,12 +46,15 @@ public class AgentInstallsListener implements ConsumerSeekAware {
   private final AgentInstallApi agentInstallApi;
   private final KafkaTopicProperties kafkaTopicProperties;
   private final String ourHostName;
+  private final Counter eventsConsumed;
+  private final Counter installInstructionFailed;
 
   @Autowired
   public AgentInstallsListener(RetryTemplate retryTemplate,
                                EnvoyRegistry envoyRegistry,
                                MonitorBindingService monitorBindingService,
                                AgentInstallApi agentInstallApi,
+                               MeterRegistry meterRegistry,
                                KafkaTopicProperties kafkaTopicProperties,
                                @Value("${localhost.name}") String ourHostName) {
     this.retryTemplate = retryTemplate;
@@ -58,6 +63,9 @@ public class AgentInstallsListener implements ConsumerSeekAware {
     this.agentInstallApi = agentInstallApi;
     this.kafkaTopicProperties = kafkaTopicProperties;
     this.ourHostName = ourHostName;
+
+    eventsConsumed = meterRegistry.counter("eventsConsumed", "type", "AgentInstallChangeEvent");
+    installInstructionFailed = meterRegistry.counter("installInstructionFailed");
   }
 
   @SuppressWarnings("unused") // used in SpEL
@@ -76,6 +84,8 @@ public class AgentInstallsListener implements ConsumerSeekAware {
       log.trace("Discarded event={} for unregistered Envoy Resource", event);
       return;
     }
+
+    eventsConsumed.increment();
 
     final OperationType op = event.getOp();
 
@@ -135,6 +145,7 @@ public class AgentInstallsListener implements ConsumerSeekAware {
         monitorBindingService.processEnvoy(envoyId, installedVersions);
       } else {
         log.warn("Unable to send agent install instruction to envoy={}", envoyId);
+        installInstructionFailed.increment();
         // It's hard to do anything else to recover, but most likely cause is a networking
         // issues which would lead to an Envoy disconnect and reattachment anyway. At that
         // point the slate is wiped clean and repopulated via normal processing.
