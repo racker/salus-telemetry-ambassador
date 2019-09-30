@@ -56,6 +56,8 @@ public class MonitorBindingService {
       return;
     }
 
+    log.debug("Getting bound monitors for envoy={} with agentInstalls={}",
+        envoyId, installedAgentVersions);
     final List<BoundMonitorDTO> boundMonitors = monitorApi.getBoundMonitors(envoyId,
         installedAgentVersions
     );
@@ -63,7 +65,7 @@ public class MonitorBindingService {
     // reconcile all bound monitors for this envoy and determine what operation types to send
 
     final Map<OperationType, List<BoundMonitorDTO>> changes = envoyRegistry.applyBoundMonitors(envoyId, boundMonitors);
-    log.debug("Applied boundMonitors and computed changes={}", changes);
+    log.debug("Applied boundMonitors={} and computed changes={}", boundMonitors, changes);
 
     // transform bound monitor changes into instructions
 
