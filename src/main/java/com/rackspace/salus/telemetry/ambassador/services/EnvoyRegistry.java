@@ -78,6 +78,8 @@ public class EnvoyRegistry {
   private final ZoneAuthorizer zoneAuthorizer;
   private final ZoneStorage zoneStorage;
   private final Counter unauthorizedZoneCounter;
+  private final Counter instructionsSentSuccessful;
+  private final Counter instructionsSentFailed;
   private final HashFunction boundMonitorHashFunction;
   private ConcurrentHashMap<String, EnvoyEntry> envoys = new ConcurrentHashMap<>();
   private ConcurrentHashMap<String, EnvoyEntry> envoysByResourceId = new ConcurrentHashMap<>();
@@ -102,6 +104,8 @@ public class EnvoyRegistry {
     this.boundMonitorHashFunction = Hashing.adler32();
 
     unauthorizedZoneCounter = meterRegistry.counter("attachErrors", "type", "unauthorizedZone");
+    instructionsSentSuccessful = meterRegistry.counter("instructionsSent", "status", "success");
+    instructionsSentFailed = meterRegistry.counter("instructionsSent", "status", "failed");
   }
 
   private static <K, V> List<V> getOrCreate(HashMap<K, List<V>> map, K key) {
@@ -310,7 +314,13 @@ public class EnvoyRegistry {
     return entry != null ? entry.getEnvoyId() : null;
   }
 
-  public void sendInstruction(String envoyInstanceId, TelemetryEdge.EnvoyInstruction instruction) {
+  /**
+   * "Sends" an instruction to the requested Envoy via the response stream of the attachment call.
+   * @param envoyInstanceId the recipient envoy
+   * @param instruction instruction to send
+   * @return <code>true</code> if the instruction was successfully sent
+   */
+  public boolean sendInstruction(String envoyInstanceId, EnvoyInstruction instruction) {
     final EnvoyEntry envoyEntry = envoys.get(envoyInstanceId);
 
     if (envoyEntry != null) {
@@ -320,6 +330,8 @@ public class EnvoyRegistry {
       try {
         synchronized (envoyEntry.instructionStream) {
           envoyEntry.instructionStream.onNext(instruction);
+          instructionsSentSuccessful.increment();
+          return true;
         }
       } catch (StatusRuntimeException e) {
         processFailedSend(envoyInstanceId, e);
@@ -328,6 +340,9 @@ public class EnvoyRegistry {
       log.warn("No observer stream for envoyInstance={}, needed for sending instruction={}",
           envoyInstanceId, instruction);
     }
+
+    instructionsSentFailed.increment();
+    return false;
   }
 
   void createTestingEntry(String envoyId) {
@@ -363,7 +378,7 @@ public class EnvoyRegistry {
 
       for (BoundMonitorDTO boundMonitor : boundMonitors) {
 
-        final String monitorId = BoundMonitorUtils.buildConfiguredMonitorId(boundMonitor);
+        final String monitorId = ConfigInstructionsBuilder.buildConfiguredMonitorId(boundMonitor);
         staleMonitorIds.remove(monitorId);
         resourcesToRetain.add(buildResourceKey(boundMonitor));
 
@@ -458,6 +473,31 @@ public class EnvoyRegistry {
         .hash();
   }
 
+  public Map<AgentType, String> trackAgentInstall(String envoyInstanceId, AgentType agentType, String agentVersion) {
+    final EnvoyEntry envoyEntry = envoys.get(envoyInstanceId);
+
+    if (envoyEntry != null) {
+      synchronized (envoyEntry.installedAgentVersions) {
+        envoyEntry.installedAgentVersions.put(agentType, agentVersion);
+        return new HashMap<>(envoyEntry.installedAgentVersions);
+      }
+    }
+
+    return null;
+  }
+
+  public Map<AgentType, String/*version*/> getInstalledAgentVersions(String envoyInstanceId) {
+    final EnvoyEntry envoyEntry = envoys.get(envoyInstanceId);
+
+    if (envoyEntry != null) {
+      synchronized (envoyEntry.installedAgentVersions) {
+        return new HashMap<>(envoyEntry.installedAgentVersions);
+      }
+    } else {
+      return null;
+    }
+  }
+
   @Data
   static class EnvoyEntry {
 
@@ -467,10 +507,12 @@ public class EnvoyRegistry {
     final String resourceId;
 
     /**
-     * Maps {@link BoundMonitorUtils#buildConfiguredMonitorId(BoundMonitorDTO)} to a hash of its the
+     * Maps {@link ConfigInstructionsBuilder#buildConfiguredMonitorId(BoundMonitorDTO)} to a hash of its the
      * bound monitor's rendered content
      */
     Map<String, BoundMonitorEntry> boundMonitors = new HashMap<>();
+
+    final Map<AgentType, String> installedAgentVersions = new HashMap<>();
   }
 
   @Data

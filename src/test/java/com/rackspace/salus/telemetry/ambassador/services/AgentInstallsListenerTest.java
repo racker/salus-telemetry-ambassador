@@ -34,6 +34,7 @@ import com.rackspace.salus.services.TelemetryEdge.EnvoyInstructionInstall;
 import com.rackspace.salus.telemetry.messaging.AgentInstallChangeEvent;
 import com.rackspace.salus.telemetry.messaging.OperationType;
 import com.rackspace.salus.telemetry.model.AgentType;
+import java.util.Map;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
@@ -51,7 +52,8 @@ import org.springframework.test.context.junit4.SpringRunner;
 @SpringBootTest(classes = {
     AgentInstallsListener.class,
     KafkaTopicProperties.class,
-    AgentInstallsListenerTest.TestConfig.class
+    AgentInstallsListenerTest.TestConfig.class,
+    MeterRegistryTestConfig.class
 }, properties = {
     "localhost.name=test-host"
 })
@@ -71,6 +73,9 @@ public class AgentInstallsListenerTest {
 
   @MockBean
   AgentInstallApi agentInstallApi;
+
+  @MockBean
+  MonitorBindingService monitorBindingService;
 
   @Captor
   ArgumentCaptor<EnvoyInstruction> envoyInstructionArg;
@@ -100,6 +105,12 @@ public class AgentInstallsListenerTest {
 
     when(envoyRegistry.containsEnvoyResource(any()))
         .thenReturn(true);
+
+    when(envoyRegistry.sendInstruction(any(), any()))
+        .thenReturn(true);
+
+    when(envoyRegistry.trackAgentInstall(any(), any(), any()))
+        .thenReturn(Map.of(AgentType.TELEGRAF, "VERSION"));
 
     AgentReleaseDTO release = new AgentReleaseDTO()
         .setType(AgentType.TELEGRAF)
@@ -133,6 +144,8 @@ public class AgentInstallsListenerTest {
     verify(envoyRegistry).getEnvoyIdByResource("r-1");
     verify(envoyRegistry).containsEnvoyResource("r-1");
 
+    verify(envoyRegistry).trackAgentInstall("e-1", AgentType.TELEGRAF, "VERSION");
+
     verify(envoyRegistry).sendInstruction(eq("e-1"), envoyInstructionArg.capture());
     final EnvoyInstructionInstall installInstruction = envoyInstructionArg.getValue().getInstall();
     assertThat(installInstruction).isNotNull();
@@ -143,7 +156,9 @@ public class AgentInstallsListenerTest {
     assertThat(installInstruction.getAgent().getVersion()).isEqualTo("VERSION");
     assertThat(installInstruction.getAgent().getType()).isEqualTo(TelemetryEdge.AgentType.TELEGRAF);
 
-    verifyNoMoreInteractions(envoyRegistry, agentInstallApi);
+    verify(monitorBindingService).processEnvoy("e-1", Map.of(AgentType.TELEGRAF, "VERSION"));
+
+    verifyNoMoreInteractions(envoyRegistry, agentInstallApi, monitorBindingService);
   }
 
   @Test
@@ -166,6 +181,6 @@ public class AgentInstallsListenerTest {
 
     verify(envoyRegistry).containsEnvoyResource("r-1");
 
-    verifyNoMoreInteractions(envoyRegistry, agentInstallApi);
+    verifyNoMoreInteractions(envoyRegistry, agentInstallApi, monitorBindingService);
   }
 }

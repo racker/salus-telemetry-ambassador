@@ -16,132 +16,61 @@
 
 package com.rackspace.salus.telemetry.ambassador.services;
 
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.hasSize;
-import static org.hamcrest.Matchers.notNullValue;
-import static org.junit.Assert.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.times;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import com.rackspace.salus.common.messaging.KafkaTopicProperties;
-import com.rackspace.salus.monitor_management.web.client.MonitorApi;
-import com.rackspace.salus.monitor_management.web.model.BoundMonitorDTO;
 import com.rackspace.salus.resource_management.web.client.ResourceApi;
-import com.rackspace.salus.services.TelemetryEdge;
-import com.rackspace.salus.services.TelemetryEdge.EnvoyInstruction;
-import com.rackspace.salus.services.TelemetryEdge.EnvoyInstructionConfigure;
 import com.rackspace.salus.telemetry.messaging.MonitorBoundEvent;
-import com.rackspace.salus.telemetry.messaging.OperationType;
-import com.rackspace.salus.telemetry.model.AgentType;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.mockito.ArgumentCaptor;
-import org.mockito.Captor;
-import org.mockito.Mock;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.test.annotation.DirtiesContext;
-import org.springframework.test.annotation.DirtiesContext.ClassMode;
-import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringRunner;
 
 @RunWith(SpringRunner.class)
-@DirtiesContext(classMode = ClassMode.AFTER_EACH_TEST_METHOD)
-@ContextConfiguration(classes = {
-    ResourceLabelsService.class,
+@SpringBootTest(classes = {
+    MonitorEventListener.class,
     KafkaTopicProperties.class,
-    ResourceLabelsServiceTest.TestConfig.class
-})
+    MeterRegistryTestConfig.class
+}, properties = {"localhost.name=test-host"})
 public class MonitorEventListenerTest {
 
-  @Mock
+  @MockBean
   EnvoyRegistry envoyRegistry;
-
-  @Mock
-  MonitorApi monitorApi;
 
   @MockBean
   ResourceApi resourceApi;
 
-  @Captor
-  ArgumentCaptor<EnvoyInstruction> envoyInstructionArg;
+  @MockBean
+  MonitorBindingService monitorBindingService;
 
-  private MonitorEventListener monitorEventListener;
-
-  @Before
-  public void setUp() throws Exception {
-    monitorEventListener = new MonitorEventListener(new KafkaTopicProperties(), envoyRegistry, monitorApi, "host-0");
-  }
+  @Autowired
+  MonitorEventListener monitorEventListener;
 
   @Test
-  public void handleMessage() {
-
-    final UUID id1 = UUID.randomUUID();
-    final UUID id2 = UUID.randomUUID();
-
-    List<BoundMonitorDTO> boundMonitors = Arrays.asList(
-        new BoundMonitorDTO()
-        .setMonitorId(id1)
-        .setResourceId("r-1")
-        .setAgentType(AgentType.TELEGRAF)
-        .setTenantId("t-1")
-        .setRenderedContent("content1"),
-        new BoundMonitorDTO()
-        .setMonitorId(id2)
-        .setResourceId("r-2")
-        .setAgentType(AgentType.FILEBEAT)
-        .setTenantId("t-2")
-        .setRenderedContent("content2")
-    );
-
-    when(monitorApi.getBoundMonitors(any()))
-        .thenReturn(boundMonitors);
+  public void testHandleMessage() {
 
     when(envoyRegistry.contains("e-1"))
         .thenReturn(true);
-
-    Map<OperationType, List<BoundMonitorDTO>> changes = new HashMap<>();
-    changes.put(OperationType.CREATE, boundMonitors);
-
-    when(envoyRegistry.applyBoundMonitors(any(), any()))
-        .thenReturn(changes);
 
     MonitorBoundEvent event = new MonitorBoundEvent()
         .setEnvoyId("e-1");
 
     monitorEventListener.handleMessage(event);
 
-    verify(monitorApi).getBoundMonitors("e-1");
+    verify(monitorBindingService).processEnvoy("e-1");
 
     verify(envoyRegistry).contains("e-1");
 
-    verify(envoyRegistry).applyBoundMonitors("e-1", boundMonitors);
+    verifyNoMoreInteractions(envoyRegistry, monitorBindingService);
+  }
 
-    verify(envoyRegistry, times(2)).sendInstruction(eq("e-1"), envoyInstructionArg.capture());
-
-    final EnvoyInstructionConfigure configure0 = envoyInstructionArg.getAllValues().get(0)
-        .getConfigure();
-    assertThat(configure0, notNullValue());
-    assertThat(configure0.getAgentType(), equalTo(TelemetryEdge.AgentType.TELEGRAF));
-    assertThat(configure0.getOperationsList(), hasSize(1));
-    assertThat(configure0.getOperations(0).getId(), equalTo(id1.toString()+"_r-1"));
-
-    final EnvoyInstructionConfigure configure1 = envoyInstructionArg.getAllValues().get(1)
-        .getConfigure();
-    assertThat(configure1, notNullValue());
-    assertThat(configure1.getAgentType(), equalTo(TelemetryEdge.AgentType.FILEBEAT));
-    assertThat(configure1.getOperationsList(), hasSize(1));
-    assertThat(configure1.getOperations(0).getId(), equalTo(id2.toString()+"_r-2"));
-
-    verifyNoMoreInteractions(envoyRegistry, monitorApi);
+  @Test
+  public void testGroupId() {
+    assertThat(monitorEventListener.getGroupId()).isEqualTo("ambassador-monitors-test-host");
   }
 }

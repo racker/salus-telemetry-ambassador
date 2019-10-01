@@ -114,40 +114,40 @@ public class ConfigInstructionsBuilderTest {
     assertThat(telegrafConfig, notNullValue());
     assertThat(telegrafConfig.getAgentType(), equalTo(TelemetryEdge.AgentType.TELEGRAF));
     assertThat(telegrafConfig.getOperationsList(), hasSize(4));
-    assertThat(telegrafConfig.getOperations(0).getId(), equalTo("00000000-0000-0001-0000-000000000000_r-1"));
+    assertThat(telegrafConfig.getOperations(0).getId(), equalTo("t-1_00000000-0000-0001-0000-000000000000_r-1"));
     assertThat(telegrafConfig.getOperations(0).getType(), equalTo(Type.CREATE));
     assertThat(telegrafConfig.getOperations(0).getContent(), equalTo("content1"));
     assertThat(telegrafConfig.getOperations(0).getInterval(), equalTo(30L));
     assertThat(telegrafConfig.getOperations(0).getExtraLabelsMap(), allOf(
-        hasEntry(BoundMonitorUtils.LABEL_MONITOR_ID, "00000000-0000-0001-0000-000000000000")
+        hasEntry(ConfigInstructionsBuilder.LABEL_MONITOR_ID, "00000000-0000-0001-0000-000000000000")
         )
     );
 
     // update, telegraf
-    assertThat(telegrafConfig.getOperations(1).getId(), equalTo("00000000-0000-0002-0000-000000000000_r-1"));
+    assertThat(telegrafConfig.getOperations(1).getId(), equalTo("t-1_00000000-0000-0002-0000-000000000000_r-1"));
     assertThat(telegrafConfig.getOperations(1).getType(), equalTo(Type.MODIFY));
     assertThat(telegrafConfig.getOperations(1).getContent(), equalTo("content2"));
     assertThat(telegrafConfig.getOperations(1).getInterval(), equalTo(31L));
     assertThat(telegrafConfig.getOperations(1).getExtraLabelsMap(), allOf(
-        hasEntry(BoundMonitorUtils.LABEL_MONITOR_ID, "00000000-0000-0002-0000-000000000000")
+        hasEntry(ConfigInstructionsBuilder.LABEL_MONITOR_ID, "00000000-0000-0002-0000-000000000000")
         )
     );
 
     // delete, telegraf
-    assertThat(telegrafConfig.getOperations(2).getId(), equalTo("00000000-0000-0003-0000-000000000000_r-1"));
+    assertThat(telegrafConfig.getOperations(2).getId(), equalTo("t-1_00000000-0000-0003-0000-000000000000_r-1"));
     assertThat(telegrafConfig.getOperations(2).getType(), equalTo(Type.REMOVE));
     // content of REMOVE is not used
 
     // create, telegraf, remote with zone
-    assertThat(telegrafConfig.getOperations(3).getId(), equalTo("00000000-0000-0005-0000-000000000000_r-2"));
+    assertThat(telegrafConfig.getOperations(3).getId(), equalTo("t-1_00000000-0000-0005-0000-000000000000_r-2"));
     assertThat(telegrafConfig.getOperations(3).getType(), equalTo(Type.CREATE));
     assertThat(telegrafConfig.getOperations(3).getContent(), equalTo("content5"));
     assertThat(telegrafConfig.getOperations(3).getInterval(), equalTo(34L));
     assertThat(telegrafConfig.getOperations(3).getExtraLabelsMap(), allOf(
-        hasEntry(BoundMonitorUtils.LABEL_TARGET_TENANT, "t-1"),
-        hasEntry(BoundMonitorUtils.LABEL_RESOURCE, "r-2"),
-        hasEntry(BoundMonitorUtils.LABEL_MONITOR_ID, "00000000-0000-0005-0000-000000000000"),
-        hasEntry(BoundMonitorUtils.LABEL_ZONE, "z-1")
+        hasEntry(ConfigInstructionsBuilder.LABEL_TARGET_TENANT, "t-1"),
+        hasEntry(ConfigInstructionsBuilder.LABEL_RESOURCE, "r-2"),
+        hasEntry(ConfigInstructionsBuilder.LABEL_MONITOR_ID, "00000000-0000-0005-0000-000000000000"),
+        hasEntry(ConfigInstructionsBuilder.LABEL_ZONE, "z-1")
         )
     );
 
@@ -156,12 +156,12 @@ public class ConfigInstructionsBuilderTest {
     assertThat(filebeatConfig, notNullValue());
     assertThat(filebeatConfig.getAgentType(), equalTo(TelemetryEdge.AgentType.FILEBEAT));
     assertThat(filebeatConfig.getOperationsList(), hasSize(1));
-    assertThat(filebeatConfig.getOperations(0).getId(), equalTo("00000000-0000-0004-0000-000000000000_r-1"));
+    assertThat(filebeatConfig.getOperations(0).getId(), equalTo("t-1_00000000-0000-0004-0000-000000000000_r-1"));
     assertThat(filebeatConfig.getOperations(0).getType(), equalTo(Type.CREATE));
     assertThat(filebeatConfig.getOperations(0).getContent(), equalTo("content4"));
     assertThat(filebeatConfig.getOperations(0).getInterval(), equalTo(33L));
     assertThat(filebeatConfig.getOperations(0).getExtraLabelsMap(), allOf(
-        hasEntry(BoundMonitorUtils.LABEL_MONITOR_ID, "00000000-0000-0004-0000-000000000000")
+        hasEntry(ConfigInstructionsBuilder.LABEL_MONITOR_ID, "00000000-0000-0004-0000-000000000000")
         )
     );
   }

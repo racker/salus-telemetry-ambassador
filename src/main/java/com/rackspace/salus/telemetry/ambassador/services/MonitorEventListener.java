@@ -17,14 +17,10 @@
 package com.rackspace.salus.telemetry.ambassador.services;
 
 import com.rackspace.salus.common.messaging.KafkaTopicProperties;
-import com.rackspace.salus.monitor_management.web.client.MonitorApi;
-import com.rackspace.salus.monitor_management.web.model.BoundMonitorDTO;
-import com.rackspace.salus.services.TelemetryEdge.EnvoyInstruction;
 import com.rackspace.salus.telemetry.messaging.MonitorBoundEvent;
-import com.rackspace.salus.telemetry.messaging.OperationType;
-import java.util.List;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.util.Map;
-import java.util.Map.Entry;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.common.TopicPartition;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -38,19 +34,23 @@ import org.springframework.stereotype.Service;
 public class MonitorEventListener implements ConsumerSeekAware {
 
   private final String topic;
+  private final MonitorBindingService monitorBindingService;
   private final EnvoyRegistry envoyRegistry;
-  private final MonitorApi monitorApi;
   private final String ourHostName;
+  private final Counter eventsConsumed;
 
   @Autowired
   public MonitorEventListener(KafkaTopicProperties kafkaTopicProperties,
                               EnvoyRegistry envoyRegistry,
-                              MonitorApi monitorApi,
+                              MonitorBindingService monitorBindingService,
+                              MeterRegistry meterRegistry,
                               @Value("${localhost.name}") String ourHostName) {
     this.topic = kafkaTopicProperties.getMonitors();
+    this.monitorBindingService = monitorBindingService;
     this.envoyRegistry = envoyRegistry;
-    this.monitorApi = monitorApi;
     this.ourHostName = ourHostName;
+
+    eventsConsumed = meterRegistry.counter("eventsConsumed", "type", "MonitorBoundEvent");
   }
 
   @SuppressWarnings("unused") // used in SpEL
@@ -72,34 +72,11 @@ public class MonitorEventListener implements ConsumerSeekAware {
       return;
     }
 
+    eventsConsumed.increment();
+
     log.debug("Handling monitorBoundEvent={}", event);
 
-    final List<BoundMonitorDTO> boundMonitors = monitorApi.getBoundMonitors(envoyId);
-
-    // reconcile all bound monitors for this envoy and determine what operation types to send
-
-    final Map<OperationType, List<BoundMonitorDTO>> changes = envoyRegistry.applyBoundMonitors(envoyId, boundMonitors);
-    log.debug("Applied boundMonitors and computed changes={}", changes);
-
-    // transform bound monitor changes into instructions
-
-    final ConfigInstructionsBuilder instructionsBuilder = new ConfigInstructionsBuilder();
-    for (Entry<OperationType, List<BoundMonitorDTO>> entry : changes.entrySet()) {
-      for (BoundMonitorDTO boundMonitor : entry.getValue()) {
-        instructionsBuilder.add(
-            boundMonitor,
-            entry.getKey()
-        );
-      }
-    }
-
-    final List<EnvoyInstruction> instructions = instructionsBuilder.build();
-
-    // ...and send them down to the envoy
-
-    for (EnvoyInstruction instruction : instructions) {
-      envoyRegistry.sendInstruction(envoyId, instruction);
-    }
+    monitorBindingService.processEnvoy(envoyId);
   }
 
   @Override

@@ -17,9 +17,8 @@
 package com.rackspace.salus.telemetry.ambassador.config;
 
 import io.micrometer.core.instrument.MeterRegistry;
-import java.net.InetAddress;
-import java.net.UnknownHostException;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.actuate.autoconfigure.metrics.MeterRegistryCustomizer;
 import org.springframework.boot.info.BuildProperties;
 import org.springframework.context.annotation.Bean;
@@ -28,22 +27,18 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class MetricsConfig {
   private final BuildProperties buildProperties;
+  private final String ourHostname;
 
-  public MetricsConfig(@Autowired(required = false) BuildProperties buildProperties) {
+  public MetricsConfig(@Autowired(required = false) BuildProperties buildProperties,
+                       @Value("${localhost.name}") String ourHostName) {
     this.buildProperties = buildProperties;
+    this.ourHostname = ourHostName;
   }
 
   @Bean
   public MeterRegistryCustomizer<MeterRegistry> metricsCommonTags() {
     return registry ->
     {
-      String ourHostname;
-      try {
-        ourHostname = InetAddress.getLocalHost().getHostName();
-      } catch (UnknownHostException e) {
-        ourHostname = "UNKNOWN";
-      }
-
       registry.config().commonTags(
           "app", buildProperties != null ? buildProperties.getName() : "salus-telemetry-ambassador",
           "host", ourHostname);

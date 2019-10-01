@@ -31,8 +31,6 @@ import com.rackspace.salus.common.messaging.KafkaTopicProperties;
 import com.rackspace.salus.resource_management.web.client.ResourceApi;
 import com.rackspace.salus.resource_management.web.model.ResourceDTO;
 import com.rackspace.salus.telemetry.messaging.ResourceEvent;
-import io.micrometer.core.instrument.MeterRegistry;
-import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.net.UnknownHostException;
 import java.util.Map;
 import org.junit.Test;
@@ -56,6 +54,7 @@ import org.springframework.web.client.ResourceAccessException;
 @ContextConfiguration(classes = {
     ResourceLabelsService.class,
     KafkaTopicProperties.class,
+    MeterRegistryTestConfig.class,
     ResourceLabelsServiceTest.TestConfig.class
 })
 public class ResourceLabelsServiceTest {
@@ -72,11 +71,6 @@ public class ResourceLabelsServiceTest {
     @Bean
     TaskExecutor taskExecutor() {
       return new SyncTaskExecutor();
-    }
-
-    @Bean
-    MeterRegistry meterRegistry() {
-      return new SimpleMeterRegistry();
     }
   }
 
