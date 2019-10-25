@@ -42,6 +42,7 @@ public class ConfigInstructionsBuilder {
   public static final String LABEL_TARGET_TENANT = "target_tenant";
   public static final String LABEL_RESOURCE = "resource_id";
   public static final String LABEL_MONITOR_ID = "monitor_id";
+  public static final String LABEL_MONITOR_TYPE = "monitor_type";
   public static final String LABEL_ZONE = "monitoring_zone";
   private HashMap<AgentType, EnvoyInstructionConfigure.Builder> buildersByAgentType = new LinkedHashMap<>();
 
@@ -78,6 +79,7 @@ public class ConfigInstructionsBuilder {
         .setInterval(convertIntervalToSeconds(boundMonitor.getInterval()));
 
     opBuilder.putExtraLabels(LABEL_MONITOR_ID, boundMonitor.getMonitorId().toString());
+    opBuilder.putExtraLabels(LABEL_MONITOR_TYPE, boundMonitor.getMonitorType().toString());
 
     if (isRemoteMonitor(boundMonitor)) {
       opBuilder.putExtraLabels(LABEL_TARGET_TENANT, boundMonitor.getTenantId());

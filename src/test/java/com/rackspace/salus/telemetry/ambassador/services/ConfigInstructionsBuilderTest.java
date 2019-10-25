@@ -31,6 +31,7 @@ import com.rackspace.salus.services.TelemetryEdge.ConfigurationOp.Type;
 import com.rackspace.salus.services.TelemetryEdge.EnvoyInstruction;
 import com.rackspace.salus.services.TelemetryEdge.EnvoyInstructionConfigure;
 import com.rackspace.salus.telemetry.messaging.OperationType;
+import com.rackspace.salus.telemetry.model.MonitorType;
 import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
@@ -56,6 +57,7 @@ public class ConfigInstructionsBuilderTest {
             .setTenantId("t-1")
             .setRenderedContent("content1")
             .setMonitorId(m1)
+            .setMonitorType(MonitorType.cpu)
             .setResourceId("r-1")
             .setInterval(Duration.ofSeconds(30)),
         OperationType.CREATE
@@ -67,6 +69,8 @@ public class ConfigInstructionsBuilderTest {
             .setTenantId("t-1")
             .setRenderedContent("content2")
             .setMonitorId(m2)
+            // differ the monitor type just for some variance
+            .setMonitorType(MonitorType.mem)
             .setResourceId("r-1")
             .setInterval(Duration.ofSeconds(31)),
         OperationType.UPDATE
@@ -78,6 +82,7 @@ public class ConfigInstructionsBuilderTest {
             .setTenantId("t-1")
             .setRenderedContent("")
             .setMonitorId(m3)
+            .setMonitorType(MonitorType.cpu)
             .setResourceId("r-1")
             .setInterval(Duration.ofSeconds(32)),
         OperationType.DELETE
@@ -89,6 +94,7 @@ public class ConfigInstructionsBuilderTest {
             .setTenantId("t-1")
             .setRenderedContent("content4")
             .setMonitorId(m4)
+            .setMonitorType(MonitorType.log)
             .setResourceId("r-1")
             .setInterval(Duration.ofSeconds(33)),
         OperationType.CREATE
@@ -99,6 +105,7 @@ public class ConfigInstructionsBuilderTest {
             .setAgentType(TELEGRAF)
             .setRenderedContent("content5")
             .setMonitorId(m5)
+            .setMonitorType(MonitorType.cpu)
             .setTenantId("t-1")
             .setResourceId("r-2")
             .setZoneName("z-1")
@@ -119,7 +126,8 @@ public class ConfigInstructionsBuilderTest {
     assertThat(telegrafConfig.getOperations(0).getContent(), equalTo("content1"));
     assertThat(telegrafConfig.getOperations(0).getInterval(), equalTo(30L));
     assertThat(telegrafConfig.getOperations(0).getExtraLabelsMap(), allOf(
-        hasEntry(ConfigInstructionsBuilder.LABEL_MONITOR_ID, "00000000-0000-0001-0000-000000000000")
+        hasEntry(ConfigInstructionsBuilder.LABEL_MONITOR_ID, "00000000-0000-0001-0000-000000000000"),
+        hasEntry(ConfigInstructionsBuilder.LABEL_MONITOR_TYPE, "cpu")
         )
     );
 
@@ -129,7 +137,8 @@ public class ConfigInstructionsBuilderTest {
     assertThat(telegrafConfig.getOperations(1).getContent(), equalTo("content2"));
     assertThat(telegrafConfig.getOperations(1).getInterval(), equalTo(31L));
     assertThat(telegrafConfig.getOperations(1).getExtraLabelsMap(), allOf(
-        hasEntry(ConfigInstructionsBuilder.LABEL_MONITOR_ID, "00000000-0000-0002-0000-000000000000")
+        hasEntry(ConfigInstructionsBuilder.LABEL_MONITOR_ID, "00000000-0000-0002-0000-000000000000"),
+        hasEntry(ConfigInstructionsBuilder.LABEL_MONITOR_TYPE, "mem")
         )
     );
 
@@ -147,6 +156,7 @@ public class ConfigInstructionsBuilderTest {
         hasEntry(ConfigInstructionsBuilder.LABEL_TARGET_TENANT, "t-1"),
         hasEntry(ConfigInstructionsBuilder.LABEL_RESOURCE, "r-2"),
         hasEntry(ConfigInstructionsBuilder.LABEL_MONITOR_ID, "00000000-0000-0005-0000-000000000000"),
+        hasEntry(ConfigInstructionsBuilder.LABEL_MONITOR_TYPE, "cpu"),
         hasEntry(ConfigInstructionsBuilder.LABEL_ZONE, "z-1")
         )
     );
@@ -161,7 +171,8 @@ public class ConfigInstructionsBuilderTest {
     assertThat(filebeatConfig.getOperations(0).getContent(), equalTo("content4"));
     assertThat(filebeatConfig.getOperations(0).getInterval(), equalTo(33L));
     assertThat(filebeatConfig.getOperations(0).getExtraLabelsMap(), allOf(
-        hasEntry(ConfigInstructionsBuilder.LABEL_MONITOR_ID, "00000000-0000-0004-0000-000000000000")
+        hasEntry(ConfigInstructionsBuilder.LABEL_MONITOR_ID, "00000000-0000-0004-0000-000000000000"),
+        hasEntry(ConfigInstructionsBuilder.LABEL_MONITOR_TYPE, "log")
         )
     );
   }
