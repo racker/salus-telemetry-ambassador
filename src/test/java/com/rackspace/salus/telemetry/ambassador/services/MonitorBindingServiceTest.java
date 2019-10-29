@@ -34,6 +34,7 @@ import com.rackspace.salus.services.TelemetryEdge.EnvoyInstruction;
 import com.rackspace.salus.services.TelemetryEdge.EnvoyInstructionConfigure;
 import com.rackspace.salus.telemetry.messaging.OperationType;
 import com.rackspace.salus.telemetry.model.AgentType;
+import com.rackspace.salus.telemetry.model.MonitorType;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -74,12 +75,14 @@ public class MonitorBindingServiceTest {
     List<BoundMonitorDTO> boundMonitors = Arrays.asList(
         new BoundMonitorDTO()
             .setMonitorId(id1)
+            .setMonitorType(MonitorType.cpu)
             .setResourceId("r-1")
             .setAgentType(AgentType.TELEGRAF)
             .setTenantId("t-1")
             .setRenderedContent("content1"),
         new BoundMonitorDTO()
             .setMonitorId(id2)
+            .setMonitorType(MonitorType.cpu)
             .setResourceId("r-2")
             .setAgentType(AgentType.FILEBEAT)
             .setTenantId("t-2")
