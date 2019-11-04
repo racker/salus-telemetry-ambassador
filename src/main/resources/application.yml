@@ -24,3 +24,6 @@ management:
         uri: ${salus.metrics.influx.uri:http://localhost:8086}
         db: salus
         enabled: ${salus.metrics.influx.enabled:false}
+      elastic:
+        enabled: ${salus.metrics.elastic.enabled:false}
+        host: ${salus.metrics.elastic.uri:http://localhost:9200}
