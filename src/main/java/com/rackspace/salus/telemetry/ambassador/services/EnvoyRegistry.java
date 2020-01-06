@@ -106,6 +106,7 @@ public class EnvoyRegistry {
     unauthorizedZoneCounter = meterRegistry.counter("attachErrors", "type", "unauthorizedZone");
     instructionsSentSuccessful = meterRegistry.counter("instructionsSent", "status", "success");
     instructionsSentFailed = meterRegistry.counter("instructionsSent", "status", "failed");
+    meterRegistry.gaugeMapSize("envoyCount", emptyList(), envoys);
   }
 
   private static <K, V> List<V> getOrCreate(HashMap<K, List<V>> map, K key) {
