@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  ~ Copyright 2019 Rackspace US, Inc.
+  ~ Copyright 2020 Rackspace US, Inc.
   ~
   ~ Licensed under the Apache License, Version 2.0 (the "License");
   ~ you may not use this file except in compliance with the License.
@@ -75,7 +75,7 @@
         <dependency>
             <groupId>com.rackspace.salus</groupId>
             <artifactId>salus-telemetry-protocol</artifactId>
-            <version>0.2-SNAPSHOT</version>
+            <version>0.3-SNAPSHOT</version>
         </dependency>
         <dependency>
             <groupId>com.rackspace.monplat</groupId>
