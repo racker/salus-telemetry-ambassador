@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Rackspace US, Inc.
+ * Copyright 2020 Rackspace US, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,6 +27,7 @@ import static org.junit.Assert.assertThat;
 
 import com.rackspace.salus.monitor_management.web.model.BoundMonitorDTO;
 import com.rackspace.salus.services.TelemetryEdge;
+import com.rackspace.salus.services.TelemetryEdge.AgentType;
 import com.rackspace.salus.services.TelemetryEdge.ConfigurationOp.Type;
 import com.rackspace.salus.services.TelemetryEdge.EnvoyInstruction;
 import com.rackspace.salus.services.TelemetryEdge.EnvoyInstructionConfigure;
@@ -175,5 +176,40 @@ public class ConfigInstructionsBuilderTest {
         hasEntry(ConfigInstructionsBuilder.LABEL_MONITOR_TYPE, "log")
         )
     );
+  }
+
+  /**
+   * EnvoyRegistry.BoundMonitorEntry only stores a subset of BoundMonitor fields, so this test
+   * replicates the case of a deletion where fields like monitorType are null in the
+   * reconstituted BoundMonitorDTO.
+   */
+  @Test
+  public void testDeleteOpWhereMonitorTypeIsNull() {
+    // com.rackspace.salus.telemetry.ambassador.services.EnvoyRegistry.BoundMonitorEntry only
+    // stores a subset of BoundMonitor fields, so this test
+    final ConfigInstructionsBuilder builder = new ConfigInstructionsBuilder();
+
+    final UUID m1 = UUID.fromString("00000000-0000-0001-0000-000000000000");
+    builder.add(
+        new BoundMonitorDTO()
+            .setAgentType(TELEGRAF)
+            .setMonitorId(m1)
+            .setTenantId("t-1")
+            .setResourceId("r-1")
+            // empty string matches EnvoyRegistry.applyBoundMonitors behavior
+            .setRenderedContent(""),
+        OperationType.DELETE
+    );
+
+    final List<EnvoyInstruction> instructions = builder.build();
+    assertThat(instructions, hasSize(1));
+
+    assertThat(instructions.get(0).getConfigure().getAgentType(),
+        equalTo(AgentType.TELEGRAF));
+    assertThat(instructions.get(0).getConfigure().getOperations(0).getId(),
+        equalTo("t-1_00000000-0000-0001-0000-000000000000_r-1"));
+    assertThat(instructions.get(0).getConfigure().getOperations(0).getType(),
+        equalTo(Type.REMOVE));
+
   }
 }
