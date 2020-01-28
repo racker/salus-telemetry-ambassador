@@ -14,3 +14,8 @@ salus:
     monitor-management-url: http://localhost:8089
     resource-management-url: http://localhost:8085
     agent-catalog-management-url: http://localhost:8090
+spring:
+  kafka:
+    listener:
+      # this will allow for to start consumer of a particular topic before the producer
+      missing-topics-fatal: false
