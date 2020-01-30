@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Rackspace US, Inc.
+ * Copyright 2020 Rackspace US, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -97,7 +97,7 @@ public class MetricRouterTest {
 
         verify(resourceLabelsService).getResourceLabels("t1", "r-1");
         verify(envoyRegistry).getResourceId("envoy-1");
-        verify(kafkaEgress).send("t1", KafkaMessageType.METRIC,
+        verify(kafkaEgress).send("t1,r-1,cpu", KafkaMessageType.METRIC,
             readContent("/MetricRouterTest/testRouteMetric.json"));
 
         verifyNoMoreInteractions(kafkaEgress, envoyRegistry);
@@ -133,7 +133,7 @@ public class MetricRouterTest {
         metricRouter.route("t1", "envoy-1", postedMetric);
 
         verify(resourceLabelsService).getResourceLabels("t-some-other", "r-other");
-        verify(kafkaEgress).send("t-some-other", KafkaMessageType.METRIC,
+        verify(kafkaEgress).send("t-some-other,r-other,cpu", KafkaMessageType.METRIC,
             readContent("/MetricRouterTest/testRouteMetric_withTargetTenant.json"));
 
         verifyNoMoreInteractions(kafkaEgress, envoyRegistry);
