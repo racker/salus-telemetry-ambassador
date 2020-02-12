@@ -16,7 +16,7 @@
 
 package com.rackspace.salus.telemetry.ambassador.services;
 
-import static com.rackspace.salus.common.messaging.KafkaMessageKeyBuilder.buildMessageKey;
+import static com.rackspace.salus.telemetry.messaging.KafkaMessageKeyBuilder.buildMessageKey;
 
 import com.rackspace.salus.common.messaging.KafkaTopicProperties;
 import com.rackspace.salus.telemetry.messaging.AttachEvent;
