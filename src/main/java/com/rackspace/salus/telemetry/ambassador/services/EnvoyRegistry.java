@@ -85,6 +85,8 @@ public class EnvoyRegistry {
   private ConcurrentHashMap<String, EnvoyEntry> envoys = new ConcurrentHashMap<>();
   private ConcurrentHashMap<String, EnvoyEntry> envoysByResourceId = new ConcurrentHashMap<>();
 
+  private static final Pattern resourceValidation = Pattern.compile("[A-Za-z0-9:-]+");
+
   @SuppressWarnings("SpringJavaInjectionPointsAutowiringInspection")
   @Autowired
   public EnvoyRegistry(AmbassadorProperties appProperties,
@@ -156,7 +158,7 @@ public class EnvoyRegistry {
         envoySummary.getSupportedAgentsList());
 
     final String resourceId = envoySummary.getResourceId();
-    final Pattern resourceValidation = Pattern.compile("[A-Za-z0-9:-]+");
+
     if (!StringUtils.hasText(resourceId)) {
       throw new StatusException(Status.INVALID_ARGUMENT.withDescription("resourceId is required"));
     } else if (!resourceValidation.matcher(resourceId).matches()) {
