@@ -148,6 +148,19 @@ public class EnvoyRegistryTest {
         );
   }
 
+  @Test(expected = StatusException.class)
+  public void postsAttachEventOnAttachFailsWithBadResourceId() throws StatusException {
+    final EnvoySummary envoySummary = EnvoySummary.newBuilder()
+        .setResourceId("$hostname:test-host")
+        .putLabels("discovered_os", "linux")
+        .build();
+
+    // We expect this to throw the StatusException
+    envoyRegistry.attach("t-1", "e-1", envoySummary,
+        InetSocketAddress.createUnresolved("localhost", 60000), streamObserver
+    ).join();
+  }
+
   @SuppressWarnings("unchecked")
   @Test
   public void storesZoneOnAttach() throws StatusException, ZoneNotAuthorizedException {
