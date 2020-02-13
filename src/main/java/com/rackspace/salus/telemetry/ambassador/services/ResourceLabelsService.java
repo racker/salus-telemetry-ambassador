@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Rackspace US, Inc.
+ * Copyright 2020 Rackspace US, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -70,8 +70,8 @@ public class ResourceLabelsService implements ConsumerSeekAware {
     this.retryTemplate = retryTemplate;
     this.taskExecutor = taskExecutor;
 
-    releasingUntracked = meterRegistry.counter("error", "cause", "releasingUntrackedResource");
-    failedLabelsPull = meterRegistry.counter("error", "cause", "failedResourceLabelPull");
+    releasingUntracked = meterRegistry.counter("errors", "cause", "releasingUntrackedResource");
+    failedLabelsPull = meterRegistry.counter("errors", "cause", "failedResourceLabelPull");
   }
 
   @SuppressWarnings({"unused", "WeakerAccess"}) // used by SpEL
