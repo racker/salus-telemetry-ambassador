@@ -16,6 +16,7 @@
 
 package com.rackspace.salus.telemetry.ambassador.services;
 
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.equalTo;
@@ -60,6 +61,7 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import org.apache.kafka.clients.producer.RecordMetadata;
 import org.apache.kafka.common.TopicPartition;
+import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
@@ -146,6 +148,21 @@ public class EnvoyRegistryTest {
                 .setTenantId("t-1")
                 .setEnvoyAddress("localhost")
         );
+  }
+
+  @Test
+  public void postsAttachEventOnAttachFailsWithBadResourceId() throws StatusException {
+    final EnvoySummary envoySummary = EnvoySummary.newBuilder()
+        .setResourceId("$hostname:test-host")
+        .putLabels("discovered_os", "linux")
+        .build();
+
+    assertThatThrownBy(() -> envoyRegistry.attach("t-1", "e-1", envoySummary,
+      InetSocketAddress.createUnresolved("localhost", 60000), streamObserver
+    ).join())
+        .isInstanceOf(StatusException.class)
+        .hasMessageContaining("resourceId may only contain alphanumeric's, ':', or '-'");
+
   }
 
   @SuppressWarnings("unchecked")
