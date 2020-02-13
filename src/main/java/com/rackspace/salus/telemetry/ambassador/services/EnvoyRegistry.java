@@ -157,11 +157,9 @@ public class EnvoyRegistry {
 
     final String resourceId = envoySummary.getResourceId();
     final Pattern resourceValidation = Pattern.compile("[A-Za-z0-9:-]+");
-    // we can check here... But lets follow this through to make sure we get the actual problem
     if (!StringUtils.hasText(resourceId)) {
       throw new StatusException(Status.INVALID_ARGUMENT.withDescription("resourceId is required"));
     } else if (!resourceValidation.matcher(resourceId).matches()) {
-      // invalid resourceId
       throw new StatusException(Status.INVALID_ARGUMENT.withDescription("resourceId may only contain alphanumeric's, ':', or '-'"));
     }
 
