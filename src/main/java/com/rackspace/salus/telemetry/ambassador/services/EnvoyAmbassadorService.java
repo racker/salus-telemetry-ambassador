@@ -74,7 +74,7 @@ public class EnvoyAmbassadorService extends TelemetryAmbassadorImplBase {
         postLog = meterRegistry.counter("messages","operation", "postLog");
         messagesPost = meterRegistry.counter("messages","operation", "postMetric");
         keepAlive = meterRegistry.counter("messages","operation", "keepAlive");
-        exceptions = meterRegistry.counter("errors", "type", "exception");
+        exceptions = meterRegistry.counter("errors", "cause", "unhandledException");
     }
 
     @Override
