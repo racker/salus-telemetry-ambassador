@@ -68,7 +68,7 @@ public class MetricRouter {
         universalTimestampFormatter = DateTimeFormatter.ISO_INSTANT;
 
         metricsRouted = meterRegistry.counter("routed", "type", "metrics");
-        missingResourceLabelTracking = meterRegistry.counter("error", "cause", "missingResourceLabelTracking");
+        missingResourceLabelTracking = meterRegistry.counter("errors", "cause", "missingResourceLabelTracking");
     }
 
     public void route(String tenantId, String envoyId,

@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Rackspace US, Inc.
+ * Copyright 2020 Rackspace US, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -74,7 +74,7 @@ public class EnvoyAmbassadorService extends TelemetryAmbassadorImplBase {
         postLog = meterRegistry.counter("messages","operation", "postLog");
         messagesPost = meterRegistry.counter("messages","operation", "postMetric");
         keepAlive = meterRegistry.counter("messages","operation", "keepAlive");
-        exceptions = meterRegistry.counter("exceptions", "errors", "exceptions");
+        exceptions = meterRegistry.counter("errors", "cause", "unhandledException");
     }
 
     @Override
