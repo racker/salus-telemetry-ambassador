@@ -157,7 +157,7 @@ public class EnvoyRegistry {
     final List<String> supportedAgentTypes = convertToStrings(
         envoySummary.getSupportedAgentsList());
 
-    final String resourceId = envoySummary.getResourceId();
+    final String resourceId = envoySummary.getResourceId().toLowerCase();
 
     if (!StringUtils.hasText(resourceId)) {
       throw new StatusException(Status.INVALID_ARGUMENT.withDescription("resourceId is required"));
