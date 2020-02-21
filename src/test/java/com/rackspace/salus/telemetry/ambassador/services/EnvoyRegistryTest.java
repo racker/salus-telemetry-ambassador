@@ -114,7 +114,7 @@ public class EnvoyRegistryTest {
   @Test
   public void postsAttachEventOnAttach() throws StatusException {
     final EnvoySummary envoySummary = EnvoySummary.newBuilder()
-        .setResourceId("hostname:test-host")
+        .setResourceId("HOSTNAME:test-host")
         .putLabels("discovered_os", "linux")
         .build();
 

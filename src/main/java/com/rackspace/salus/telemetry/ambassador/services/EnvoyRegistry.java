@@ -157,7 +157,7 @@ public class EnvoyRegistry {
     final List<String> supportedAgentTypes = convertToStrings(
         envoySummary.getSupportedAgentsList());
 
-    final String resourceId = envoySummary.getResourceId().toLowerCase();
+    final String resourceId = envoySummary.getResourceId();
 
     if (!StringUtils.hasText(resourceId)) {
       throw new StatusException(Status.INVALID_ARGUMENT.withDescription("resourceId is required"));
@@ -241,7 +241,7 @@ public class EnvoyRegistry {
       Map<String, String> envoyLabels,
       SocketAddress remoteAddr) {
 
-    final String resourceId = envoySummary.getResourceId();
+    final String resourceId = envoySummary.getResourceId().toLowerCase();
     final AttachEvent attachEvent = new AttachEvent()
         .setTenantId(tenantId)
         .setEnvoyId(envoyId)
