@@ -96,7 +96,7 @@ steps:
       path: /root
 
   - name: gcr.io/cloud-builders/git
-    id: GIT_CLONE
+    id: HELM_CLONE
     waitFor:
     - COMPILE_AND_PUSH_CONTAINER
     - PUSH_UP_CACHE
@@ -106,7 +106,7 @@ steps:
       path: /helm-salus-${_SALUS_APP}
 
   - name: gcr.io/cloud-builders/git
-    id: GIT_CHECKOUT
+    id: HELM_CHECKOUT
     waitFor:
     - GIT_CLONE
     args: ['checkout', 'master']
@@ -116,6 +116,7 @@ steps:
       path: /helm-salus-${_SALUS_APP}
 
   - name: 'gcr.io/$PROJECT_ID/helm'
+    id: DEPLOY_APPLICATION
     args: ['upgrade', '--install', '${_SALUS_APP}', '--namespace', '${_APP_NAMESPACE}', '/helm-salus-${_SALUS_APP}']
     env:
     - 'CLOUDSDK_COMPUTE_ZONE=${_CLOUDSDK_COMPUTE_ZONE}'
