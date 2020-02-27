@@ -108,7 +108,7 @@ steps:
   - name: gcr.io/cloud-builders/git
     id: HELM_CHECKOUT
     waitFor:
-    - GIT_CLONE
+    - HELM_CLONE
     args: ['checkout', 'master']
     dir: "/helm-salus-${_SALUS_APP}"
     volumes:
