@@ -2,6 +2,9 @@ substitutions:
   _GCS_CACHE_BUCKET: salus-cache
   _SALUS_PROJECT: salus-telemetry-ambassador
   _SALUS_APP: ambassador
+  _APP_NAMESPACE: salus-development
+  _CLOUDSDK_COMPUTE_ZONE: us-east1-b
+  _CLOUDSDK_CONTAINER_CLUSTER: salus-dev
 
 steps:
 
@@ -97,27 +100,27 @@ steps:
     waitFor:
     - COMPILE_AND_PUSH_CONTAINER
     - PUSH_UP_CACHE
-    args: ['clone', 'https://source.developers.google.com/p/salus-220516/r/github_rackspace-segment-support_helm-salus-ambassador', '/helm-salus-ambassador/']
+    args: ['clone', 'https://source.developers.google.com/p/salus-220516/r/github_rackspace-segment-support_helm-salus-${_SALUS_APP}', '/helm-salus-${_SALUS_APP}/']
     volumes:
     - name: chart.home
-      path: /helm-salus-ambassador
+      path: /helm-salus-${_SALUS_APP}
 
   - name: gcr.io/cloud-builders/git
     id: GIT_CHECKOUT
     waitFor:
     - GIT_CLONE
     args: ['checkout', 'master']
-    dir: "/helm-salus-ambassador"
+    dir: "/helm-salus-${_SALUS_APP}"
     volumes:
     - name: chart.home
-      path: /helm-salus-ambassador
+      path: /helm-salus-${_SALUS_APP}
 
   - name: 'gcr.io/$PROJECT_ID/helm'
-    args: ['upgrade', '--install', '${_SALUS_APP}', '--namespace', 'salus-development', '/helm-salus-ambassador']
+    args: ['upgrade', '--install', '${_SALUS_APP}', '--namespace', '${_APP_NAMESPACE}', '/helm-salus-${_SALUS_APP}']
     env:
-    - 'CLOUDSDK_COMPUTE_ZONE=us-east1-b'
-    - 'CLOUDSDK_CONTAINER_CLUSTER=salus-dev'
+    - 'CLOUDSDK_COMPUTE_ZONE=${_CLOUDSDK_COMPUTE_ZONE}'
+    - 'CLOUDSDK_CONTAINER_CLUSTER=${_CLOUDSDK_CONTAINER_CLUSTER}'
     - 'TILLERLESS=true'
     volumes:
     - name: chart.home
-      path: /helm-salus-ambassador
+      path: /helm-salus-${_SALUS_APP}
