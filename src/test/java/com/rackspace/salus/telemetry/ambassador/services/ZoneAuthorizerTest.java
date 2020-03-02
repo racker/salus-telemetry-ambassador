@@ -59,7 +59,7 @@ public class ZoneAuthorizerTest {
     final ResolvedZone zone = authorizer.authorize("any tenant", zoneDTO.getName());
 
     assertThat(zone, notNullValue());
-    assertThat(zone.getName(), equalTo("notpublic"));
+    assertThat(zone.getName(), equalTo("notPublic"));
     assertThat(zone.getTenantId(), equalTo("any tenant"));
     assertThat(zone.isPublicZone(), equalTo(false));
   }
