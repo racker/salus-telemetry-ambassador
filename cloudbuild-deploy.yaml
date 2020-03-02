@@ -100,7 +100,7 @@ steps:
     waitFor:
     - COMPILE_AND_PUSH_CONTAINER
     - PUSH_UP_CACHE
-    args: ['clone', 'https://source.developers.google.com/p/salus-220516/r/github_rackspace-segment-support_helm-salus-${_SALUS_APP}', '/workspace/helm-salus-${_SALUS_APP}/']
+    args: ['clone', 'https://source.developers.google.com/p/$PROJECT_ID/r/github_rackspace-segment-support_helm-salus-${_SALUS_APP}', '/workspace/helm-salus-${_SALUS_APP}/']
 
   - name: 'gcr.io/$PROJECT_ID/helm'
     id: DEPLOY_APPLICATION
