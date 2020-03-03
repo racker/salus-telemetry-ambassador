@@ -4,6 +4,7 @@ substitutions:
   _SALUS_APP: ambassador
   _APP_NAMESPACE: salus-development
   _CLOUDSDK_COMPUTE_ZONE: us-east1-b
+  _CLOUDSDK_COMPUTE_REGION: us-east1
   _CLOUDSDK_CONTAINER_CLUSTER: salus-dev
 
 steps:
@@ -107,5 +108,6 @@ steps:
     args: ['upgrade', '--install', '${_SALUS_APP}', '--namespace', '${_APP_NAMESPACE}', '/workspace/helm-salus-${_SALUS_APP}']
     env:
     - 'CLOUDSDK_COMPUTE_ZONE=${_CLOUDSDK_COMPUTE_ZONE}'
+    - 'CLOUDSDK_COMPUTE_REGION=${_CLOUDSDK_COMPUTE_REGION}'
     - 'CLOUDSDK_CONTAINER_CLUSTER=${_CLOUDSDK_CONTAINER_CLUSTER}'
     - 'TILLERLESS=true'
