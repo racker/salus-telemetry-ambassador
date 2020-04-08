@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Rackspace US, Inc.
+ * Copyright 2020 Rackspace US, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -29,7 +29,6 @@ import static org.junit.Assert.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
@@ -61,7 +60,6 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import org.apache.kafka.clients.producer.RecordMetadata;
 import org.apache.kafka.common.TopicPartition;
-import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
@@ -217,6 +215,9 @@ public class EnvoyRegistryTest {
                 .setEnvoyAddress("localhost")
         );
 
+    verify(resourceLabelsService)
+        .trackResource("t-1", "hostname:test-host");
+
     verifyNoMoreInteractions(eventProducer, zoneAuthorizer, zoneStorage, resourceLabelsService);
   }
 
@@ -267,6 +268,9 @@ public class EnvoyRegistryTest {
                 .setTenantId("t-1")
                 .setEnvoyAddress("localhost")
         );
+
+    verify(resourceLabelsService)
+        .trackResource("t-1", "hostname:test-host");
 
     verifyNoMoreInteractions(eventProducer, zoneAuthorizer, zoneStorage, resourceLabelsService);
   }
@@ -425,13 +429,6 @@ public class EnvoyRegistryTest {
       ));
     }
 
-    verify(resourceLabelsService, times(2)).trackResource("t-1", "r-1");
-    verify(resourceLabelsService).trackResource("t-1", "r-2");
-    verify(resourceLabelsService).trackResource("t-1", "r-3");
-    verify(resourceLabelsService).trackResource("t-1", "r-4");
-    verify(resourceLabelsService).trackResource("t-1", "r-5");
-    verify(resourceLabelsService).releaseResource("t-1", "r-2");
-
     verifyNoMoreInteractions(resourceLabelsService);
   }
 
@@ -490,8 +487,6 @@ public class EnvoyRegistryTest {
       ));
       assertThat(changes, not(hasKey(OperationType.DELETE)));
     }
-
-    verify(resourceLabelsService).trackResource("t-1", "r-1");
 
     verifyNoMoreInteractions(resourceLabelsService);
   }
