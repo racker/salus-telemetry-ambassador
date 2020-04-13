@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Rackspace US, Inc.
+ * Copyright 2020 Rackspace US, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -178,6 +178,8 @@ public class EnvoyRegistry {
     log.info(
         "Attaching envoy tenantId={}, envoyId={} from remoteAddr={} with resourceId={}, zone={}, labels={}, supports agents={}",
         tenantId, envoyId, remoteAddr, resourceId, zone, envoyLabels, supportedAgentTypes);
+
+    resourceLabelsService.trackResource(tenantId, resourceId);
 
     return envoyLeaseTracking.grant(envoyId)
         .thenApply(leaseId -> {
@@ -440,31 +442,7 @@ public class EnvoyRegistry {
 
     } // end of synchronized block
 
-    updateResourceLabelTracking(resourcesToRetain, changes);
-
     return changes;
-  }
-
-  private void updateResourceLabelTracking(
-      Set<ResourceKey> resourcesToRetain,
-      HashMap<OperationType, List<BoundMonitorDTO>> changes) {
-
-    changes.getOrDefault(OperationType.CREATE, emptyList()).stream()
-        .map(EnvoyRegistry::buildResourceKey)
-        .distinct()
-        .forEach(resourceKey -> {
-          resourceLabelsService
-              .trackResource(resourceKey.getTenantId(), resourceKey.getResourceId()
-              );
-        });
-    changes.getOrDefault(OperationType.DELETE, emptyList()).stream()
-        .map(EnvoyRegistry::buildResourceKey)
-        .filter(resourceKey -> !resourcesToRetain.contains(resourceKey))
-        .distinct()
-        .forEach(resourceKey -> {
-          resourceLabelsService
-              .releaseResource(resourceKey.getTenantId(), resourceKey.getResourceId());
-        });
   }
 
   /**

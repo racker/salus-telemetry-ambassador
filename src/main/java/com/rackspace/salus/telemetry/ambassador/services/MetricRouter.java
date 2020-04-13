@@ -122,7 +122,7 @@ public class MetricRouter {
             .setDevice(resourceId)
             .setDeviceMetadata(labels)
             .setMonitoringSystem(MonitoringSystem.SALUS)
-            .setSystemMetadata(Collections.singletonMap("envoyId", envoyId))
+            .setSystemMetadata(Collections.singletonMap("envoy_id", envoyId))
             .setCollectionMetadata(tagsMap)
             .setCollectionName(measurementName)
             .setFvalues(nameTagValue.getFvaluesMap())

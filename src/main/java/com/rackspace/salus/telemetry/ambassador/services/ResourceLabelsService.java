@@ -126,11 +126,13 @@ public class ResourceLabelsService implements ConsumerSeekAware {
       final Map<String, String> resourceLabels = retryTemplate.execute(
           retryContext -> {
 
-            log.debug("Trying to query for tenantId={} resourceId={} try={}",
+            log.trace("Trying to query for tenantId={} resourceId={} try={}",
                 tenantId, resourceId, retryContext.getRetryCount());
 
             final ResourceDTO resource = resourceApi.getByResourceId(tenantId, resourceId);
 
+            log.debug("Retrieved labels for tenantId={} resourceId={} try={}",
+                tenantId, resourceId, retryContext.getRetryCount());
             return resource.getLabels();
           },
           retryContext -> {
