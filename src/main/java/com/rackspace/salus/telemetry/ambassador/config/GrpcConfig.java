@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Rackspace US, Inc.
+ * Copyright 2020 Rackspace US, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@ import com.google.protobuf.util.JsonFormat;
 import io.grpc.ServerBuilder;
 import io.grpc.netty.GrpcSslContexts;
 import io.grpc.netty.NettyServerBuilder;
+import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.handler.ssl.ClientAuth;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
@@ -57,7 +58,10 @@ public class GrpcConfig extends GRpcServerBuilderConfigurer {
 
     @Override
     public void configure(ServerBuilder<?> serverBuilder) {
-        final NettyServerBuilder nettyServerBuilder = (NettyServerBuilder) serverBuilder;
+        final NettyServerBuilder nettyServerBuilder =
+            ((NettyServerBuilder) serverBuilder)
+                .bossEventLoopGroup(new NioEventLoopGroup(appProperties.getGrpcBossThreads()))
+                .workerEventLoopGroup(new NioEventLoopGroup(appProperties.getGrpcWorkerThreads()));
 
         try {
             if (!appProperties.isDisableTls()) {

@@ -80,7 +80,7 @@
         <dependency>
             <groupId>com.rackspace.salus</groupId>
             <artifactId>salus-telemetry-protocol</artifactId>
-            <version>0.3-SNAPSHOT</version>
+            <version>0.5-SNAPSHOT</version>
         </dependency>
         <dependency>
             <groupId>com.rackspace.monplat</groupId>
@@ -144,7 +144,7 @@
             <!-- for grpc tls support -->
             <groupId>io.netty</groupId>
             <artifactId>netty-tcnative-boringssl-static</artifactId>
-            <version>2.0.25.Final</version>
+            <version>2.0.30.Final</version>
         </dependency>
         <dependency>
             <groupId>org.apache.httpcomponents</groupId>
