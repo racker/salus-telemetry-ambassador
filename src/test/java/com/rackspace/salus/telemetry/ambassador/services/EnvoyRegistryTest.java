@@ -35,6 +35,7 @@ import static org.mockito.Mockito.when;
 
 import com.rackspace.salus.monitor_management.web.model.BoundMonitorDTO;
 import com.rackspace.salus.services.TelemetryEdge.EnvoyInstruction;
+import com.rackspace.salus.services.TelemetryEdge.EnvoyInstructionReady;
 import com.rackspace.salus.services.TelemetryEdge.EnvoySummary;
 import com.rackspace.salus.telemetry.ambassador.config.AmbassadorProperties;
 import com.rackspace.salus.telemetry.ambassador.config.GrpcConfig;
@@ -146,6 +147,11 @@ public class EnvoyRegistryTest {
                 .setTenantId("t-1")
                 .setEnvoyAddress("localhost")
         );
+
+    final EnvoyInstruction readyInstruction = EnvoyInstruction.newBuilder()
+        .setReady(EnvoyInstructionReady.newBuilder().build())
+        .build();
+    verify(streamObserver).onNext(readyInstruction);
   }
 
   @Test

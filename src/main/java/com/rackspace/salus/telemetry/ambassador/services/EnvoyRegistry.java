@@ -26,6 +26,7 @@ import com.google.common.hash.Hashing;
 import com.rackspace.salus.monitor_management.web.model.BoundMonitorDTO;
 import com.rackspace.salus.services.TelemetryEdge;
 import com.rackspace.salus.services.TelemetryEdge.EnvoyInstruction;
+import com.rackspace.salus.services.TelemetryEdge.EnvoyInstructionReady;
 import com.rackspace.salus.services.TelemetryEdge.EnvoySummary;
 import com.rackspace.salus.telemetry.ambassador.config.AmbassadorProperties;
 import com.rackspace.salus.telemetry.ambassador.types.ResourceKey;
@@ -192,6 +193,10 @@ public class EnvoyRegistry {
         .thenCompose(leaseId ->
             // register in zone if not null or passes through otherwise
             registerInZone(envoyId, resourceId, zone, leaseId))
+        .thenApply(leaseId -> {
+            sendReadyInstruction(instructionStreamObserver);
+            return leaseId;
+        })
         .thenCompose(leaseId ->
             postAttachEvent(tenantId, envoyId, envoySummary, envoyLabels, remoteAddr)
                 .thenApply(sendResult -> {
@@ -213,6 +218,14 @@ public class EnvoyRegistry {
         )
         ;
 
+  }
+
+  private void sendReadyInstruction(StreamObserver<EnvoyInstruction> instructionStreamObserver) {
+    instructionStreamObserver.onNext(
+        EnvoyInstruction.newBuilder()
+            .setReady(EnvoyInstructionReady.newBuilder().build())
+            .build()
+    );
   }
 
   private CompletionStage<Long> registerInZone(String envoyId, String resourceId,
