@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Rackspace US, Inc.
+ * Copyright 2020 Rackspace US, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +18,6 @@ package com.rackspace.salus.telemetry.ambassador.services;
 
 import static java.util.Collections.singletonMap;
 import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.nullValue;
 import static org.hamcrest.Matchers.startsWith;
 import static org.junit.Assert.assertThat;
@@ -36,43 +35,20 @@ import java.util.Map;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.context.annotation.Bean;
-import org.springframework.core.task.SyncTaskExecutor;
-import org.springframework.core.task.TaskExecutor;
-import org.springframework.retry.policy.SimpleRetryPolicy;
-import org.springframework.retry.support.RetryTemplate;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.annotation.DirtiesContext.ClassMode;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringRunner;
-import org.springframework.web.client.ResourceAccessException;
 
 @RunWith(SpringRunner.class)
 @DirtiesContext(classMode = ClassMode.AFTER_EACH_TEST_METHOD)
 @ContextConfiguration(classes = {
     ResourceLabelsService.class,
     KafkaTopicProperties.class,
-    MeterRegistryTestConfig.class,
-    ResourceLabelsServiceTest.TestConfig.class
+    MeterRegistryTestConfig.class
 })
 public class ResourceLabelsServiceTest {
-
-  @TestConfiguration
-  static class TestConfig {
-    @Bean
-    RetryTemplate retryTemplate() {
-      final RetryTemplate retryTemplate = new RetryTemplate();
-      retryTemplate.setRetryPolicy(new SimpleRetryPolicy(2));
-      return retryTemplate;
-    }
-
-    @Bean
-    TaskExecutor taskExecutor() {
-      return new SyncTaskExecutor();
-    }
-  }
 
   @Autowired
   ResourceLabelsService resourceLabelsService;
@@ -87,70 +63,6 @@ public class ResourceLabelsServiceTest {
   public void testKafkaFields() throws UnknownHostException {
     assertThat(resourceLabelsService.getGroupId(), startsWith(ResourceLabelsService.GROUP_ID_PREFIX));
     assertThat(resourceLabelsService.getTopic(), equalTo(kafkaTopicProperties.getResources()));
-  }
-
-  @Test
-  public void test_trackResource() {
-    final Map<String, String> expectedLabels = singletonMap("agent_discovered_os", "linux");
-
-    when(resourceApi.getByResourceId("t-1", "r-1"))
-        .thenReturn(
-            new ResourceDTO()
-            .setLabels(expectedLabels)
-        );
-
-    resourceLabelsService.trackResource("t-1", "r-1");
-
-    final Map<String, String> labels = resourceLabelsService
-        .getResourceLabels("t-1", "r-1");
-
-    assertThat(labels, equalTo(expectedLabels));
-
-    verify(resourceApi).getByResourceId("t-1", "r-1");
-
-    verifyNoMoreInteractions(resourceApi);
-  }
-
-  @Test
-  public void test_trackResource_failFirstQuery() {
-    final Map<String, String> expectedLabels = singletonMap("agent_discovered_os", "linux");
-
-    when(resourceApi.getByResourceId("t-1", "r-1"))
-        .thenThrow(ResourceAccessException.class)
-        .thenReturn(
-            new ResourceDTO()
-                .setLabels(expectedLabels)
-        );
-
-    resourceLabelsService.trackResource("t-1", "r-1");
-
-    final Map<String, String> labels = resourceLabelsService
-        .getResourceLabels("t-1", "r-1");
-
-    assertThat(labels, equalTo(expectedLabels));
-
-    verify(resourceApi, times(2)).getByResourceId("t-1", "r-1");
-
-    verifyNoMoreInteractions(resourceApi);
-  }
-
-  @Test
-  public void test_trackResource_failAllQuery() {
-    when(resourceApi.getByResourceId("t-1", "r-1"))
-        .thenThrow(ResourceAccessException.class)
-        .thenThrow(ResourceAccessException.class);
-
-    resourceLabelsService.trackResource("t-1", "r-1");
-
-    final Map<String, String> labels = resourceLabelsService
-        .getResourceLabels("t-1", "r-1");
-
-    assertThat(labels, notNullValue());
-    assertThat(labels.size(), equalTo(0));
-
-    verify(resourceApi, times(2)).getByResourceId("t-1", "r-1");
-
-    verifyNoMoreInteractions(resourceApi);
   }
 
   @Test
@@ -191,8 +103,8 @@ public class ResourceLabelsServiceTest {
   }
 
   @Test
-  public void test_handResourceEvent_noTracking() {
-    resourceLabelsService.handResourceEvent(
+  public void test_handleResourceEvent_noTracking() {
+    resourceLabelsService.handleResourceEvent(
         new ResourceEvent()
         .setTenantId("t-1")
         .setResourceId("r-1")
@@ -202,7 +114,7 @@ public class ResourceLabelsServiceTest {
   }
 
   @Test
-  public void test_handResourceEvent_tracking() {
+  public void test_handleResourceEvent_tracking() {
 
     when(resourceApi.getByResourceId("t-1", "r-1"))
         .thenReturn(new ResourceDTO().setLabels(singletonMap("env", "pre")))
@@ -214,7 +126,7 @@ public class ResourceLabelsServiceTest {
         .getResourceLabels("t-1", "r-1");
     assertThat(preLabels, equalTo(singletonMap("env", "pre")));
 
-    resourceLabelsService.handResourceEvent(
+    resourceLabelsService.handleResourceEvent(
         new ResourceEvent()
         .setTenantId("t-1")
         .setResourceId("r-1")
@@ -223,6 +135,52 @@ public class ResourceLabelsServiceTest {
     final Map<String, String> postLabels = resourceLabelsService
         .getResourceLabels("t-1", "r-1");
     assertThat(postLabels, equalTo(singletonMap("env", "post")));
+
+    verify(resourceApi, times(2)).getByResourceId("t-1", "r-1");
+
+    verifyNoMoreInteractions(resourceApi);
+  }
+
+  @Test
+  public void test_trackResource_beforeResourceManagerAwareness() {
+    when(resourceApi.getByResourceId("t-1", "r-1"))
+        .thenReturn(null);
+
+    resourceLabelsService.trackResource("t-1", "r-1");
+
+    final Map<String, String> labels = resourceLabelsService
+        .getResourceLabels("t-1", "r-1");
+    // will be the default empty map created when tracking
+    assertThat(labels, equalTo(Map.of()));
+
+    verify(resourceApi).getByResourceId("t-1", "r-1");
+
+    verifyNoMoreInteractions(resourceApi);
+  }
+
+  @Test
+  public void test_handleResourceEvent_failedPull() {
+
+    when(resourceApi.getByResourceId("t-1", "r-1"))
+        .thenReturn(new ResourceDTO().setLabels(singletonMap("env", "pre")))
+        .thenReturn(null);
+
+    resourceLabelsService.trackResource("t-1", "r-1");
+
+    final Map<String, String> preLabels = resourceLabelsService
+        .getResourceLabels("t-1", "r-1");
+    assertThat(preLabels, equalTo(singletonMap("env", "pre")));
+
+    // pull during this will fail, but leave labels as is
+    resourceLabelsService.handleResourceEvent(
+        new ResourceEvent()
+            .setTenantId("t-1")
+            .setResourceId("r-1")
+    );
+
+    final Map<String, String> postLabels = resourceLabelsService
+        .getResourceLabels("t-1", "r-1");
+    assertThat(postLabels, equalTo(singletonMap("env", "pre")));
 
     verify(resourceApi, times(2)).getByResourceId("t-1", "r-1");
 

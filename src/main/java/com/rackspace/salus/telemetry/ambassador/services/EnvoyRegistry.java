@@ -64,6 +64,7 @@ import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.kafka.support.SendResult;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -83,6 +84,7 @@ public class EnvoyRegistry {
   private final Counter instructionsSentSuccessful;
   private final Counter instructionsSentFailed;
   private final HashFunction boundMonitorHashFunction;
+  private final Counter missingInstanceDuringRemove;
   private ConcurrentHashMap<String, EnvoyEntry> envoys = new ConcurrentHashMap<>();
   private ConcurrentHashMap<String, EnvoyEntry> envoysByResourceId = new ConcurrentHashMap<>();
 
@@ -110,6 +112,7 @@ public class EnvoyRegistry {
     unauthorizedZoneCounter = meterRegistry.counter("attachErrors", "type", "unauthorizedZone");
     instructionsSentSuccessful = meterRegistry.counter("instructionsSent", "status", "success");
     instructionsSentFailed = meterRegistry.counter("instructionsSent", "status", "failed");
+    missingInstanceDuringRemove = meterRegistry.counter("registryIssues", "issue", "missingInstanceDuringRemove");
     meterRegistry.gaugeMapSize("envoyCount", emptyList(), envoys);
   }
 
@@ -124,6 +127,10 @@ public class EnvoyRegistry {
 
   /**
    * Executed whenever we receive a new connection from an envoy.
+   * <p>
+   *   This method is asynchronous to avoid any cross-corruption of the GrpcContext since
+   *   both Envoy processing and etcd calls are gRPC based.
+   * </p>
    *
    * @param tenantId tenant of the attached Envoy
    * @param envoyId the Envoy's UUID
@@ -132,9 +139,14 @@ public class EnvoyRegistry {
    * @param instructionStreamObserver the response stream
    * @return a {@link CompletableFuture} of the lease ID granted to the attached Envoy
    */
+  @Async
   public CompletableFuture<?> attach(String tenantId, String envoyId, EnvoySummary envoySummary,
       SocketAddress remoteAddr, StreamObserver<EnvoyInstruction> instructionStreamObserver)
       throws StatusException {
+    final String resourceId = envoySummary.getResourceId();
+
+    log.debug("Processing attach tenant={} envoy={} resourceId={} remoteAddr={}",
+        tenantId, envoyId, resourceId, remoteAddr);
 
     final ResolvedZone zone;
     if (StringUtils.hasText(envoySummary.getZone())) {
@@ -158,8 +170,6 @@ public class EnvoyRegistry {
     final List<String> supportedAgentTypes = convertToStrings(
         envoySummary.getSupportedAgentsList());
 
-    final String resourceId = envoySummary.getResourceId();
-
     if (!StringUtils.hasText(resourceId)) {
       throw new StatusException(Status.INVALID_ARGUMENT.withDescription("resourceId is required"));
     } else if (!resourceValidation.matcher(resourceId).matches()) {
@@ -176,10 +186,6 @@ public class EnvoyRegistry {
       envoyLeaseTracking.revoke(envoyId);
     }
 
-    log.info(
-        "Attaching envoy tenantId={}, envoyId={} from remoteAddr={} with resourceId={}, zone={}, labels={}, supports agents={}",
-        tenantId, envoyId, remoteAddr, resourceId, zone, envoyLabels, supportedAgentTypes);
-
     resourceLabelsService.trackResource(tenantId, resourceId);
 
     return envoyLeaseTracking.grant(envoyId)
@@ -188,13 +194,14 @@ public class EnvoyRegistry {
               instructionStreamObserver, tenantId, envoyId, resourceId);
           envoys.put(envoyId, entry);
           envoysByResourceId.put(resourceId, entry);
+          log.debug("Tracking entry for envoyInstance={} with resourceId={}", envoyId, resourceId);
           return leaseId;
         })
         .thenCompose(leaseId ->
             // register in zone if not null or passes through otherwise
             registerInZone(envoyId, resourceId, zone, leaseId))
         .thenApply(leaseId -> {
-            sendReadyInstruction(instructionStreamObserver);
+            sendReadyInstruction(envoyId, instructionStreamObserver);
             return leaseId;
         })
         .thenCompose(leaseId ->
@@ -220,12 +227,17 @@ public class EnvoyRegistry {
 
   }
 
-  private void sendReadyInstruction(StreamObserver<EnvoyInstruction> instructionStreamObserver) {
-    instructionStreamObserver.onNext(
-        EnvoyInstruction.newBuilder()
-            .setReady(EnvoyInstructionReady.newBuilder().build())
-            .build()
-    );
+  private void sendReadyInstruction(String envoyId,
+                                    StreamObserver<EnvoyInstruction> instructionStreamObserver) {
+    log.debug("Sending ready instruction to envoy={}", envoyId);
+    synchronized (instructionStreamObserver) {
+      instructionStreamObserver.onNext(
+          EnvoyInstruction.newBuilder()
+              .setReady(EnvoyInstructionReady.newBuilder().build())
+              .build()
+      );
+      instructionsSentSuccessful.increment();
+    }
   }
 
   private CompletionStage<Long> registerInZone(String envoyId, String resourceId,
@@ -306,10 +318,24 @@ public class EnvoyRegistry {
     });
   }
 
+  /**
+   * <p>
+   * Runs async to avoid cross-interactions with the etcd operations that also use
+   * grpc context, which seems to be stored in thread-local storage
+   * </p>
+   * @param instanceId
+   */
+  @Async
   public void remove(String instanceId) {
+    log.debug("Removing registration of envoyInstance={}", instanceId);
     final EnvoyEntry entry = envoys.remove(instanceId);
+    if (entry != null) {
+      resourceLabelsService.releaseResource(entry.getTenantId(), entry.getResourceId());
+    } else {
+      log.warn("Unable to locate envoy entry for instance={}", instanceId);
+      missingInstanceDuringRemove.increment();
+    }
     envoyLeaseTracking.revoke(instanceId);
-    resourceLabelsService.releaseResource(entry.getTenantId(), entry.getResourceId());
   }
 
   private void processFailedSend(String instanceId, Exception e) {

@@ -92,7 +92,7 @@ public class EnvoyAmbassadorService extends TelemetryAmbassadorImplBase {
         } catch (StatusException e) {
             responseObserver.onError(e);
         } catch (Exception e) {
-            log.error("Unhandled exception occurred in envoy attach", e);
+            log.error("Unhandled exception occurred in envoy={} attach", envoyId, e);
             exceptions.increment();
             responseObserver.onError(
                 new StatusException(Status.UNKNOWN
@@ -104,15 +104,12 @@ public class EnvoyAmbassadorService extends TelemetryAmbassadorImplBase {
     private void registerCancelHandler(String instanceId, SocketAddress remoteAddr, StreamObserver<EnvoyInstruction> responseObserver) {
         if (responseObserver instanceof ServerCallStreamObserver) {
             ((ServerCallStreamObserver<EnvoyInstruction>) responseObserver).setOnCancelHandler(() -> {
-                // run async to avoid cross-interactions with the etcd operations that also use grpc
-                taskExecutor.execute(() -> {
-                    log.info("Removing cancelled envoy={} address={}", instanceId, remoteAddr);
-                    try {
-                        envoyRegistry.remove(instanceId);
-                    } catch (Exception e) {
-                        log.warn("Trying to remove envoy={} from registry", instanceId, e);
-                    }
-                });
+                log.info("Removing cancelled envoy={} address={}", instanceId, remoteAddr);
+                try {
+                    envoyRegistry.remove(instanceId);
+                } catch (Exception e) {
+                    log.warn("Trying to remove envoy={} from registry", instanceId, e);
+                }
             });
         }
     }
