@@ -109,8 +109,7 @@ public class ResourceLabelsService implements ConsumerSeekAware {
   }
 
   /**
-   * Query the labels of the resource from resource management microservice and
-   * retry if the service throws an error
+   * Query the labels of the resource from resource management microservice.
    * @return true if the resource labels were pulled successfully
    */
   private boolean pullResource(ResourceKey key) {
