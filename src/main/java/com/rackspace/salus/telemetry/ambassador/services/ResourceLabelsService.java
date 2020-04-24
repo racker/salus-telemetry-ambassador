@@ -109,7 +109,7 @@ public class ResourceLabelsService implements ConsumerSeekAware {
   }
 
   /**
-   * Asynchronously query the labels of the resource from resource management microservice and
+   * Query the labels of the resource from resource management microservice and
    * retry if the service throws an error
    * @return true if the resource labels were pulled successfully
    */
@@ -119,10 +119,6 @@ public class ResourceLabelsService implements ConsumerSeekAware {
     final String resourceId = key.getResourceId();
 
     log.debug("Pulling labels for tenantId={} resourceId={}", tenantId, resourceId);
-
-    log.trace("Trying to query for tenantId={} resourceId={}",
-        tenantId, resourceId
-    );
 
     final ResourceDTO resource = resourceApi.getByResourceId(tenantId, resourceId);
 
