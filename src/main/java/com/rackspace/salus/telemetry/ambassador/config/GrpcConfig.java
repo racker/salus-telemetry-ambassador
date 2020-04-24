@@ -25,6 +25,7 @@ import io.netty.handler.ssl.ClientAuth;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.SslProvider;
+import io.netty.util.concurrent.DefaultThreadFactory;
 import java.io.File;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
@@ -61,7 +62,10 @@ public class GrpcConfig extends GRpcServerBuilderConfigurer {
         final NettyServerBuilder nettyServerBuilder =
             ((NettyServerBuilder) serverBuilder)
                 .bossEventLoopGroup(new NioEventLoopGroup(appProperties.getGrpcBossThreads()))
-                .workerEventLoopGroup(new NioEventLoopGroup(appProperties.getGrpcWorkerThreads()));
+                .workerEventLoopGroup(new NioEventLoopGroup(
+                    appProperties.getGrpcWorkerThreads(),
+                    new DefaultThreadFactory("grpc-worker")
+                ));
 
         try {
             if (!appProperties.isDisableTls()) {
