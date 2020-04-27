@@ -21,6 +21,7 @@ import io.grpc.ServerBuilder;
 import io.grpc.netty.GrpcSslContexts;
 import io.grpc.netty.NettyServerBuilder;
 import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.ssl.ClientAuth;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
@@ -65,7 +66,8 @@ public class GrpcConfig extends GRpcServerBuilderConfigurer {
                 .workerEventLoopGroup(new NioEventLoopGroup(
                     appProperties.getGrpcWorkerThreads(),
                     new DefaultThreadFactory("grpc-worker")
-                ));
+                ))
+                .channelType(NioServerSocketChannel.class);
 
         try {
             if (!appProperties.isDisableTls()) {
