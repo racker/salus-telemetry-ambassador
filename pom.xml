@@ -80,7 +80,7 @@
         <dependency>
             <groupId>com.rackspace.salus</groupId>
             <artifactId>salus-telemetry-protocol</artifactId>
-            <version>0.6-SNAPSHOT</version>
+            <version>0.7-SNAPSHOT</version>
         </dependency>
         <dependency>
             <groupId>com.rackspace.monplat</groupId>
