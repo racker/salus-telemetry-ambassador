@@ -64,7 +64,6 @@ import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.kafka.support.SendResult;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -139,7 +138,6 @@ public class EnvoyRegistry {
    * @param instructionStreamObserver the response stream
    * @return a {@link CompletableFuture} of the lease ID granted to the attached Envoy
    */
-  @Async
   public CompletableFuture<?> attach(String tenantId, String envoyId, EnvoySummary envoySummary,
       SocketAddress remoteAddr, StreamObserver<EnvoyInstruction> instructionStreamObserver)
       throws StatusException {
@@ -325,7 +323,6 @@ public class EnvoyRegistry {
    * </p>
    * @param instanceId
    */
-  @Async
   public void remove(String instanceId) {
     log.debug("Removing registration of envoyInstance={}", instanceId);
     final EnvoyEntry entry = envoys.remove(instanceId);
