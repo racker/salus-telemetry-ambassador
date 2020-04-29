@@ -59,8 +59,13 @@ public class AmbassadorProperties {
      */
     int grpcBossThreads = 2;
     /**
-     * Specifies the number of threads used to process gRPC messages. Can be set to zero to
+     * Specifies the number of threads used to process gRPC sockets. Can be set to zero to
      * use the default Netty calculation based on 2 * available processors.
      */
     int grpcWorkerThreads = 8;
+
+    /**
+     * Specifies number of threads used to process server methods and etcd client calls.
+     */
+    int asyncThreads = 8;
 }
