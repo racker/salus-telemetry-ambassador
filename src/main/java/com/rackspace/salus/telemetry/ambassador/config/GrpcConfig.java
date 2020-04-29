@@ -38,8 +38,10 @@ import javax.net.ssl.SSLException;
 import lombok.extern.slf4j.Slf4j;
 import org.lognet.springboot.grpc.GRpcServerBuilderConfigurer;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.task.TaskExecutor;
 import org.springframework.util.Assert;
 import org.springframework.vault.core.VaultTemplate;
 import org.springframework.vault.support.CertificateBundle;
@@ -51,11 +53,14 @@ import org.springframework.vault.support.VaultCertificateResponse;
 public class GrpcConfig extends GRpcServerBuilderConfigurer {
     private final AmbassadorProperties appProperties;
     private final VaultTemplate vaultTemplate;
+    private final TaskExecutor executor;
 
     @Autowired
-    public GrpcConfig(AmbassadorProperties appProperties, @Nullable VaultTemplate vaultTemplate) {
+    public GrpcConfig(AmbassadorProperties appProperties, @Nullable VaultTemplate vaultTemplate,
+                      @Qualifier("taskExecutor") TaskExecutor executor) {
         this.appProperties = appProperties;
         this.vaultTemplate = vaultTemplate;
+        this.executor = executor;
     }
 
     @Override
@@ -68,6 +73,8 @@ public class GrpcConfig extends GRpcServerBuilderConfigurer {
                     new DefaultThreadFactory("grpc-worker")
                 ))
                 .channelType(NioServerSocketChannel.class);
+
+        serverBuilder.executor(executor);
 
         try {
             if (!appProperties.isDisableTls()) {
