@@ -41,6 +41,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Import;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.util.Assert;
 import org.springframework.vault.core.VaultTemplate;
@@ -49,6 +50,7 @@ import org.springframework.vault.support.VaultCertificateRequest;
 import org.springframework.vault.support.VaultCertificateResponse;
 
 @Configuration
+@Import(AsyncConfig.class)
 @Slf4j
 public class GrpcConfig extends GRpcServerBuilderConfigurer {
     private final AmbassadorProperties appProperties;
