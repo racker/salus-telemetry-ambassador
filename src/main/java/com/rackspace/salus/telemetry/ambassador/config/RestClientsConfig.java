@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Rackspace US, Inc.
+ * Copyright 2020 Rackspace US, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,6 +22,7 @@ import com.rackspace.salus.acm.web.client.AgentInstallApiClient;
 import com.rackspace.salus.monitor_management.web.client.MonitorApi;
 import com.rackspace.salus.monitor_management.web.client.MonitorApiClient;
 import com.rackspace.salus.monitor_management.web.client.ZoneApi;
+import com.rackspace.salus.monitor_management.web.client.ZoneApiCacheConfig;
 import com.rackspace.salus.monitor_management.web.client.ZoneApiClient;
 import com.rackspace.salus.resource_management.web.client.ResourceApi;
 import com.rackspace.salus.resource_management.web.client.ResourceApiClient;
@@ -29,8 +30,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Import;
 
 @Configuration
+@Import(ZoneApiCacheConfig.class)
 public class RestClientsConfig {
 
   private final ServicesProperties servicesProperties;

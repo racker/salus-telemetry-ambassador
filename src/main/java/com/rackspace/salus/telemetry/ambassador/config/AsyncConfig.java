@@ -16,6 +16,7 @@
 
 package com.rackspace.salus.telemetry.ambassador.config;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.task.TaskExecutor;
@@ -26,11 +27,18 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 @EnableAsync
 public class AsyncConfig {
 
+    private final AmbassadorProperties properties;
+
+    @Autowired
+    public AsyncConfig(AmbassadorProperties properties) {
+        this.properties = properties;
+    }
+
     @Bean
     public TaskExecutor taskExecutor() {
         final ThreadPoolTaskExecutor taskExecutor = new ThreadPoolTaskExecutor();
-        taskExecutor.setCorePoolSize(4);
-        taskExecutor.setMaxPoolSize(4);
+        taskExecutor.setCorePoolSize(properties.getAsyncThreads());
+        taskExecutor.setMaxPoolSize(properties.getAsyncThreads());
         taskExecutor.setThreadNamePrefix("async-");
         return taskExecutor;
     }
