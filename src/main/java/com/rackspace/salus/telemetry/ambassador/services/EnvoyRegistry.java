@@ -87,7 +87,9 @@ public class EnvoyRegistry {
   private ConcurrentHashMap<String, EnvoyEntry> envoys = new ConcurrentHashMap<>();
   private ConcurrentHashMap<String, EnvoyEntry> envoysByResourceId = new ConcurrentHashMap<>();
 
-  private static final Pattern resourceValidation = Pattern.compile("[A-Za-z0-9:-]+");
+  static final String BAD_RESOURCE_ID_VALIDATION_MESSAGE =
+      "resourceId may only contain alphanumeric's, '.', ':', or '-'";
+  private static final Pattern resourceValidation = Pattern.compile("[A-Za-z0-9.:-]+");
 
   @SuppressWarnings("SpringJavaInjectionPointsAutowiringInspection")
   @Autowired
@@ -171,7 +173,8 @@ public class EnvoyRegistry {
     if (!StringUtils.hasText(resourceId)) {
       throw new StatusException(Status.INVALID_ARGUMENT.withDescription("resourceId is required"));
     } else if (!resourceValidation.matcher(resourceId).matches()) {
-      throw new StatusException(Status.INVALID_ARGUMENT.withDescription("resourceId may only contain alphanumeric's, ':', or '-'"));
+      throw new StatusException(Status.INVALID_ARGUMENT.withDescription(
+          BAD_RESOURCE_ID_VALIDATION_MESSAGE));
     }
 
     EnvoyEntry existingEntry = envoys.get(envoyId);

@@ -113,7 +113,7 @@ public class EnvoyRegistryTest {
   @Test
   public void postsAttachEventOnAttach() throws StatusException {
     final EnvoySummary envoySummary = EnvoySummary.newBuilder()
-        .setResourceId("hostname:test-host")
+        .setResourceId("hostname:test-host.com")
         .putLabels("discovered_os", "linux")
         .build();
 
@@ -141,7 +141,7 @@ public class EnvoyRegistryTest {
     verify(eventProducer)
         .sendAttach(
             new AttachEvent()
-                .setResourceId("hostname:test-host")
+                .setResourceId("hostname:test-host.com")
                 .setLabels(Collections.singletonMap("agent_discovered_os", "linux"))
                 .setEnvoyId("e-1")
                 .setTenantId("t-1")
@@ -165,7 +165,7 @@ public class EnvoyRegistryTest {
       InetSocketAddress.createUnresolved("localhost", 60000), streamObserver
     ).join())
         .isInstanceOf(StatusException.class)
-        .hasMessageContaining("resourceId may only contain alphanumeric's, ':', or '-'");
+        .hasMessageContaining(EnvoyRegistry.BAD_RESOURCE_ID_VALIDATION_MESSAGE);
 
   }
 
