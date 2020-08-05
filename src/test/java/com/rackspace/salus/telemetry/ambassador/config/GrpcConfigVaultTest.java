@@ -74,7 +74,7 @@ import org.springframework.vault.support.VaultCertificateResponse;
     },
     properties = {
         "grpc.port=0",
-        "salus.ambassador.public-zone-tenants= {'aaaaaa'}"
+        "salus.ambassador.public-zone-tenants=aaaaaa"
     }
 )
 @ActiveProfiles("test")
