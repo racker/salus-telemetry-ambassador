@@ -16,19 +16,22 @@
 
 package com.rackspace.salus.telemetry.ambassador.config;
 
+import javax.validation.constraints.NotBlank;
 import javax.validation.constraints.NotEmpty;
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
+import org.springframework.validation.annotation.Validated;
 
 @ConfigurationProperties("salus.services")
 @Component
 @Data
+@Validated
 public class ServicesProperties {
-  @NotEmpty
+  @NotBlank
   String monitorManagementUrl;
-  @NotEmpty
+  @NotBlank
   String resourceManagementUrl;
-  @NotEmpty
+  @NotBlank
   String agentCatalogManagementUrl;
 }
