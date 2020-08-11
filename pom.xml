@@ -143,15 +143,20 @@
         </dependency>
 
         <dependency>
+            <!-- https://mvnrepository.com/artifact/io.github.lognet/grpc-spring-boot-starter/3.5.6 -->
             <groupId>io.github.lognet</groupId>
             <artifactId>grpc-spring-boot-starter</artifactId>
-            <version>3.5.3</version>
+            <version>3.5.6</version>
+        </dependency>
+        <dependency>
+            <groupId>com.google.protobuf</groupId>
+            <artifactId>protobuf-java-util</artifactId>
         </dependency>
         <dependency>
             <!-- for grpc tls support -->
             <groupId>io.netty</groupId>
             <artifactId>netty-tcnative-boringssl-static</artifactId>
-            <version>2.0.29.Final</version>
+            <version>2.0.31.Final</version>
         </dependency>
         <dependency>
             <groupId>org.apache.httpcomponents</groupId>
