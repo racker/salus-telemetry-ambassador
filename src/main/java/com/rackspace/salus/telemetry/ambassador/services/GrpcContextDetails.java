@@ -82,6 +82,13 @@ public class GrpcContextDetails implements ServerInterceptor {
         return ENVOY_ID.get();
     }
 
+    static Context contextForTesting(String tenantId, String envoyId,
+                                     SocketAddress remoteAddress) {
+        return Context.current().withValues(TENANT_ID, tenantId, ENVOY_ID, envoyId,
+            REMOTE_ADDR, remoteAddress
+        );
+    }
+
     @Override
     public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
             ServerCall<ReqT, RespT> call,

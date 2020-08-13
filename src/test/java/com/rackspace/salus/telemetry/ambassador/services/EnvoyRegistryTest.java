@@ -78,6 +78,7 @@ import org.springframework.util.concurrent.ListenableFuture;
 @SpringBootTest(classes = {
     EnvoyRegistry.class,
     AmbassadorProperties.class,
+    TestAsyncConfig.class,
     GrpcConfig.class,
     SimpleMeterRegistry.class
 })
@@ -118,7 +119,7 @@ public class EnvoyRegistryTest {
         .build();
 
     final CompletableFuture<Long> assignedLease = CompletableFuture.completedFuture(1234L);
-    when(envoyLeaseTracking.grant(any()))
+    when(envoyLeaseTracking.grant(anyString(), anyLong()))
         .thenReturn(assignedLease);
 
     when(envoyResourceManagement.registerResource(any(), any(), anyLong(), any(), any(), any()))
@@ -179,7 +180,7 @@ public class EnvoyRegistryTest {
         .build();
 
     final CompletableFuture<Long> assignedLease = CompletableFuture.completedFuture(1234L);
-    when(envoyLeaseTracking.grant(any()))
+    when(envoyLeaseTracking.grant(anyString(), anyLong()))
         .thenReturn(assignedLease);
 
     when(envoyResourceManagement.registerResource(any(), any(), anyLong(), any(), any(), any()))
@@ -236,7 +237,7 @@ public class EnvoyRegistryTest {
         .build();
 
     final CompletableFuture<Long> assignedLease = CompletableFuture.completedFuture(1234L);
-    when(envoyLeaseTracking.grant(any()))
+    when(envoyLeaseTracking.grant(anyString(), anyLong()))
         .thenReturn(assignedLease);
 
     when(envoyResourceManagement.registerResource(any(), any(), anyLong(), any(), any(), any()))
