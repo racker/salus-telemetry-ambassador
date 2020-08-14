@@ -293,7 +293,7 @@ public class EnvoyRegistry {
         .collect(Collectors.toList());
   }
 
-  @Scheduled(fixedDelayString = "${salus.ambassador.envoyRefreshInterval:PT45S}")
+  @Scheduled(fixedDelayString = "#{ambassadorProperties.envoyRefreshInterval}")
   public void refreshEnvoys() {
 
     envoys.forEach(appProperties.getEnvoyRefreshParallelism(), (instanceId, envoyEntry) -> {
