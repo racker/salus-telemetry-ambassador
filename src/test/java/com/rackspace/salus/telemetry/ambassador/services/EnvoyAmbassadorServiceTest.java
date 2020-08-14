@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Rackspace US, Inc.
+ * Copyright 2020 Rackspace US, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,20 +16,31 @@
 
 package com.rackspace.salus.telemetry.ambassador.services;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.notNull;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.when;
 
+import com.rackspace.salus.services.TelemetryEdge;
+import com.rackspace.salus.services.TelemetryEdge.EnvoyInstruction;
+import com.rackspace.salus.services.TelemetryEdge.EnvoySummary;
 import com.rackspace.salus.services.TelemetryEdge.Metric;
 import com.rackspace.salus.services.TelemetryEdge.NameTagValueMetric;
 import com.rackspace.salus.services.TelemetryEdge.PostTestMonitorResultsResponse;
 import com.rackspace.salus.services.TelemetryEdge.TestMonitorResults;
+import io.grpc.Status;
+import io.grpc.Status.Code;
+import io.grpc.StatusException;
 import io.grpc.stub.StreamObserver;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import java.net.InetSocketAddress;
+import java.util.concurrent.CompletableFuture;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -75,6 +86,100 @@ public class EnvoyAmbassadorServiceTest {
 
   @MockBean
   TestMonitorResultsProducer testMonitorResultsProducer;
+
+  @Test
+  public void testAttach_success() throws StatusException {
+    @SuppressWarnings("unchecked") final StreamObserver<EnvoyInstruction> respStreamObserver =
+        mock(StreamObserver.class);
+
+    when(envoyRegistry.attach(any(), any(), any(), any(), any()))
+        // complete normally
+        .thenReturn(CompletableFuture.completedFuture(null));
+
+    EnvoySummary envoySummary = TelemetryEdge.EnvoySummary.newBuilder()
+        .setResourceId("r-1")
+        .addSupportedAgents(TelemetryEdge.AgentType.TELEGRAF)
+        .putLabels("os", "linux")
+        .build();
+
+    final InetSocketAddress remoteAddress = new InetSocketAddress("127.0.0.1", 33333);
+    GrpcContextDetails.contextForTesting("t-1", "e-1", remoteAddress)
+        .run(() -> {
+          // EXECUTE
+          envoyAmbassadorService.attachEnvoy(envoySummary, respStreamObserver);
+        });
+
+    verify(envoyRegistry).attach("t-1", "e-1", envoySummary, remoteAddress, respStreamObserver);
+
+    verifyNoMoreInteractions(envoyRegistry, respStreamObserver);
+  }
+
+  @Test
+  public void testAttach_statusException() throws StatusException {
+    @SuppressWarnings("unchecked") final StreamObserver<EnvoyInstruction> respStreamObserver =
+        mock(StreamObserver.class);
+
+    when(envoyRegistry.attach(any(), any(), any(), any(), any()))
+        // throw a StatusException
+        .thenThrow(new StatusException(Status.NOT_FOUND));
+
+    EnvoySummary envoySummary = TelemetryEdge.EnvoySummary.newBuilder()
+        .setResourceId("r-1")
+        .addSupportedAgents(TelemetryEdge.AgentType.TELEGRAF)
+        .putLabels("os", "linux")
+        .build();
+
+    final InetSocketAddress remoteAddress = new InetSocketAddress("127.0.0.1", 33333);
+    GrpcContextDetails.contextForTesting("t-1", "e-1", remoteAddress)
+        .run(() -> {
+          // EXECUTE
+          envoyAmbassadorService.attachEnvoy(envoySummary, respStreamObserver);
+        });
+
+    verify(envoyRegistry).attach("t-1", "e-1", envoySummary, remoteAddress, respStreamObserver);
+
+    verify(respStreamObserver).onError(argThat(throwable -> {
+      assertThat(throwable).isInstanceOf(StatusException.class);
+      assertThat(((StatusException) throwable).getStatus()).isEqualTo(Status.NOT_FOUND);
+      return true;
+    }));
+
+    verifyNoMoreInteractions(envoyRegistry, respStreamObserver);
+  }
+
+  @Test
+  public void testAttach_nonStatusException() throws StatusException {
+    @SuppressWarnings("unchecked") final StreamObserver<EnvoyInstruction> respStreamObserver =
+        mock(StreamObserver.class);
+
+    when(envoyRegistry.attach(any(), any(), any(), any(), any()))
+        // throw an "unexpected" exception
+        .thenThrow(new IllegalStateException("just a test"));
+
+    EnvoySummary envoySummary = TelemetryEdge.EnvoySummary.newBuilder()
+        .setResourceId("r-1")
+        .addSupportedAgents(TelemetryEdge.AgentType.TELEGRAF)
+        .putLabels("os", "linux")
+        .build();
+
+    final InetSocketAddress remoteAddress = new InetSocketAddress("127.0.0.1", 33333);
+    GrpcContextDetails.contextForTesting("t-1", "e-1", remoteAddress)
+        .run(() -> {
+          // EXECUTE
+          envoyAmbassadorService.attachEnvoy(envoySummary, respStreamObserver);
+        });
+
+    verify(envoyRegistry).attach("t-1", "e-1", envoySummary, remoteAddress, respStreamObserver);
+
+    verify(respStreamObserver).onError(argThat(throwable -> {
+      assertThat(throwable).isInstanceOf(StatusException.class);
+      assertThat(((StatusException) throwable).getStatus().getCode()).isEqualTo(Code.UNKNOWN);
+      assertThat(((StatusException) throwable).getStatus().getDescription()).isEqualTo("Unknown error occurred: just a test");
+      return true;
+    }));
+
+    verifyNoMoreInteractions(envoyRegistry, respStreamObserver);
+  }
 
   @Test
   public void testPostTestMonitorResults_success() {

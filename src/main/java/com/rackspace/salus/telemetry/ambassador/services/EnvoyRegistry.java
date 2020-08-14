@@ -189,7 +189,7 @@ public class EnvoyRegistry {
 
     resourceLabelsService.trackResource(tenantId, resourceId);
 
-    return envoyLeaseTracking.grant(envoyId)
+    return envoyLeaseTracking.grant(envoyId, appProperties.getEnvoyLeaseDuration().toSeconds())
         .thenApply(leaseId -> {
           final EnvoyEntry entry = new EnvoyEntry(
               instructionStreamObserver, tenantId, envoyId, resourceId);
@@ -293,28 +293,24 @@ public class EnvoyRegistry {
         .collect(Collectors.toList());
   }
 
-  @Scheduled(fixedDelayString = "${ambassador.envoyRefreshInterval:PT10S}")
+  @Scheduled(fixedDelayString = "#{ambassadorProperties.envoyRefreshInterval}")
   public void refreshEnvoys() {
 
-    envoys.forEachKey(appProperties.getEnvoyRefreshParallelism(), instanceId -> {
-      final EnvoyEntry envoyEntry = envoys.get(instanceId);
-
-      if (envoyEntry != null) {
-        try {
-          synchronized (envoyEntry.instructionStream) {
-            envoyEntry.instructionStream
-                .onNext(TelemetryEdge.EnvoyInstruction.newBuilder()
-                    .setRefresh(
-                        TelemetryEdge.EnvoyInstructionRefresh.newBuilder().build()
-                    )
-                    .build());
-          }
-        } catch (Exception e) {
-          // Most likely exceptions are due to the gRPC connection being closed by
-          // Envoy connection loss or failure to establish attachment. The later
-          // gets thrown as an IllegalStateException.
-          processFailedSend(instanceId, e);
+    envoys.forEach(appProperties.getEnvoyRefreshParallelism(), (instanceId, envoyEntry) -> {
+      try {
+        synchronized (envoyEntry.instructionStream) {
+          envoyEntry.instructionStream
+              .onNext(TelemetryEdge.EnvoyInstruction.newBuilder()
+                  .setRefresh(
+                      TelemetryEdge.EnvoyInstructionRefresh.newBuilder().build()
+                  )
+                  .build());
         }
+      } catch (Exception e) {
+        // Most likely exceptions are due to the gRPC connection being closed by
+        // Envoy connection loss or failure to establish attachment. The later
+        // gets thrown as an IllegalStateException.
+        processFailedSend(instanceId, e);
       }
     });
   }
