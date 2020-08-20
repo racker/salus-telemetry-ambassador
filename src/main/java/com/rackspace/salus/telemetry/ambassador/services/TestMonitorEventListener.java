@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Rackspace US, Inc.
+ * Copyright 2020 Rackspace US, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,9 +17,11 @@
 package com.rackspace.salus.telemetry.ambassador.services;
 
 import com.rackspace.salus.common.messaging.KafkaTopicProperties;
+import com.rackspace.salus.monitor_management.web.client.MonitorApi;
 import com.rackspace.salus.services.TelemetryEdge;
 import com.rackspace.salus.services.TelemetryEdge.EnvoyInstruction;
 import com.rackspace.salus.services.TelemetryEdge.EnvoyInstructionTestMonitor;
+import com.rackspace.salus.services.TelemetryEdge.TestMonitorResults;
 import com.rackspace.salus.telemetry.messaging.TestMonitorRequestEvent;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -33,16 +35,22 @@ public class TestMonitorEventListener {
 
   private final EnvoyRegistry envoyRegistry;
   private final KafkaTopicProperties kafkaTopicProperties;
+  private final TestMonitorResultsProducer resultsProducer;
+  private final MonitorApi monitorApi;
   private final String appName;
   private final String ourHostName;
 
   @Autowired
   public TestMonitorEventListener(EnvoyRegistry envoyRegistry,
                                   KafkaTopicProperties kafkaTopicProperties,
+                                  TestMonitorResultsProducer resultsProducer,
+                                  MonitorApi monitorApi,
                                   @Value("${spring.application.name}") String appName,
                                   @Value("${localhost.name}") String ourHostName) {
     this.envoyRegistry = envoyRegistry;
     this.kafkaTopicProperties = kafkaTopicProperties;
+    this.resultsProducer = resultsProducer;
+    this.monitorApi = monitorApi;
     this.appName = appName;
     this.ourHostName = ourHostName;
   }
@@ -68,12 +76,32 @@ public class TestMonitorEventListener {
 
     log.debug("Handling testMonitorEvent={}", event);
 
+    final String installedAgentVersion =
+        envoyRegistry.getInstalledAgentVersions(envoyId)
+            .get(event.getAgentType());
+
+    // immediately reject test monitor if no version of given agent type is installed
+    if (installedAgentVersion == null) {
+      resultsProducer.send(
+          TestMonitorResults.newBuilder()
+              .setCorrelationId(event.getCorrelationId())
+              .addErrors("Agent is not installed")
+              .build()
+      );
+      return;
+    }
+
+    final String translatedContent = monitorApi.translateMonitorContent(
+        event.getAgentType(), installedAgentVersion,
+        event.getRenderedContent()
+    );
+
     EnvoyInstruction testMonitorInstruction = EnvoyInstruction.newBuilder()
         .setTestMonitor(
             EnvoyInstructionTestMonitor.newBuilder()
                 .setAgentType(TelemetryEdge.AgentType.valueOf(event.getAgentType().name()))
                 .setCorrelationId(event.getCorrelationId())
-                .setContent(event.getRenderedContent())
+                .setContent(translatedContent)
                 .setTimeout(event.getTimeout())
         )
         .build();
