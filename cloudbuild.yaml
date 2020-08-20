@@ -27,20 +27,6 @@ steps:
     - name: user.home
       path: /root
 
-  - id: ls
-    name: 'maven:3.6-jdk-11'
-    args: ['ls']
-    volumes:
-      - name: user.home
-        path: /root
-
-  - id: pwd
-    name: 'maven:3.6-jdk-11'
-    args: ['pwd']
-    volumes:
-      - name: user.home
-        path: /root
-
   - id: VERIFY
     name: 'maven:3.6-jdk-11'
     args: ['mvn', '-B', 'verify', '-s', '.mvn/settings.xml']
