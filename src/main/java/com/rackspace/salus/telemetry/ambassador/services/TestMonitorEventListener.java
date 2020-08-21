@@ -23,6 +23,8 @@ import com.rackspace.salus.services.TelemetryEdge.EnvoyInstruction;
 import com.rackspace.salus.services.TelemetryEdge.EnvoyInstructionTestMonitor;
 import com.rackspace.salus.services.TelemetryEdge.TestMonitorResults;
 import com.rackspace.salus.telemetry.messaging.TestMonitorRequestEvent;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -39,12 +41,16 @@ public class TestMonitorEventListener {
   private final MonitorApi monitorApi;
   private final String appName;
   private final String ourHostName;
+  private final Counter requestsCounter;
+  private final Counter missingAgentCounter;
+  private final Counter failedTranslateCounter;
 
   @Autowired
   public TestMonitorEventListener(EnvoyRegistry envoyRegistry,
                                   KafkaTopicProperties kafkaTopicProperties,
                                   TestMonitorResultsProducer resultsProducer,
                                   MonitorApi monitorApi,
+                                  MeterRegistry meterRegistry,
                                   @Value("${spring.application.name}") String appName,
                                   @Value("${localhost.name}") String ourHostName) {
     this.envoyRegistry = envoyRegistry;
@@ -53,6 +59,10 @@ public class TestMonitorEventListener {
     this.monitorApi = monitorApi;
     this.appName = appName;
     this.ourHostName = ourHostName;
+
+    requestsCounter = meterRegistry.counter("testMonitorListener.requests");
+    missingAgentCounter = meterRegistry.counter("testMonitorListener.missingAgent");
+    failedTranslateCounter = meterRegistry.counter("testMonitorListener.failedTranslate");
   }
 
   @SuppressWarnings("unused") // in @KafkaListener SpEL
@@ -73,6 +83,7 @@ public class TestMonitorEventListener {
       log.trace("Discarded testMonitorEvent={} for unregistered Envoy", event);
       return;
     }
+    requestsCounter.increment();
 
     log.debug("Handling testMonitorEvent={}", event);
 
@@ -82,6 +93,7 @@ public class TestMonitorEventListener {
 
     // immediately reject test monitor if no version of given agent type is installed
     if (installedAgentVersion == null) {
+      missingAgentCounter.increment();
       resultsProducer.send(
           TestMonitorResults.newBuilder()
               .setCorrelationId(event.getCorrelationId())
@@ -91,10 +103,24 @@ public class TestMonitorEventListener {
       return;
     }
 
-    final String translatedContent = monitorApi.translateMonitorContent(
-        event.getAgentType(), installedAgentVersion,
-        event.getRenderedContent()
-    );
+    final String translatedContent;
+    try {
+      translatedContent = monitorApi.translateMonitorContent(
+          event.getAgentType(), installedAgentVersion,
+          event.getMonitorType(), event.getScope(), event.getRenderedContent()
+      );
+    } catch (Exception e) {
+      failedTranslateCounter.increment();
+      log.warn("Unexpected exception while translating test-monitor content for correlationId={}",
+          event.getCorrelationId(), e);
+      resultsProducer.send(
+          TestMonitorResults.newBuilder()
+              .setCorrelationId(event.getCorrelationId())
+              .addErrors("Internal error: "+e.getMessage())
+              .build()
+      );
+      return;
+    }
 
     EnvoyInstruction testMonitorInstruction = EnvoyInstruction.newBuilder()
         .setTestMonitor(
