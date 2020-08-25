@@ -60,9 +60,11 @@ public class TestMonitorEventListener {
     this.appName = appName;
     this.ourHostName = ourHostName;
 
-    requestsCounter = meterRegistry.counter("testMonitorListener.requests");
-    missingAgentCounter = meterRegistry.counter("testMonitorListener.missingAgent");
-    failedTranslateCounter = meterRegistry.counter("testMonitorListener.failedTranslate");
+    requestsCounter = meterRegistry.counter("testMonitorListenerRequests");
+    missingAgentCounter = meterRegistry.counter("testMonitorListenerErrors",
+        "type", "missingAgent");
+    failedTranslateCounter = meterRegistry.counter("testMonitorListenerErrors",
+        "type", "failedTranslate");
   }
 
   @SuppressWarnings("unused") // in @KafkaListener SpEL
@@ -116,7 +118,7 @@ public class TestMonitorEventListener {
       resultsProducer.send(
           TestMonitorResults.newBuilder()
               .setCorrelationId(event.getCorrelationId())
-              .addErrors("Internal error: "+e.getMessage())
+              .addErrors("Internal error: " + e.getMessage())
               .build()
       );
       return;
