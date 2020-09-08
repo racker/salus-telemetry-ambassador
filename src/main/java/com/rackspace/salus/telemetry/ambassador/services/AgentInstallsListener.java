@@ -16,7 +16,6 @@
 
 package com.rackspace.salus.telemetry.ambassador.services;
 
-import com.rackspace.salus.acm.web.client.AgentInstallApi;
 import com.rackspace.salus.acm.web.model.AgentReleaseDTO;
 import com.rackspace.salus.acm.web.model.BoundAgentInstallDTO;
 import com.rackspace.salus.common.messaging.KafkaTopicProperties;
@@ -24,6 +23,9 @@ import com.rackspace.salus.services.TelemetryEdge;
 import com.rackspace.salus.telemetry.messaging.AgentInstallChangeEvent;
 import com.rackspace.salus.telemetry.messaging.OperationType;
 import com.rackspace.salus.telemetry.model.AgentType;
+import com.rackspace.salus.telemetry.model.NotFoundException;
+import com.rackspace.salus.telemetry.repositories.AgentInstallRepository;
+import com.rackspace.salus.telemetry.repositories.BoundAgentInstallRepository;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.util.Map;
@@ -31,6 +33,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.common.TopicPartition;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.Range.Bound;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.listener.ConsumerSeekAware;
 import org.springframework.retry.support.RetryTemplate;
@@ -43,26 +46,26 @@ public class AgentInstallsListener implements ConsumerSeekAware {
   private final RetryTemplate retryTemplate;
   private final EnvoyRegistry envoyRegistry;
   private final MonitorBindingService monitorBindingService;
-  private final AgentInstallApi agentInstallApi;
   private final KafkaTopicProperties kafkaTopicProperties;
   private final String ourHostName;
   private final Counter eventsConsumed;
   private final Counter installInstructionFailed;
+  private final BoundAgentInstallRepository boundAgentInstallRepository;
 
   @Autowired
   public AgentInstallsListener(RetryTemplate retryTemplate,
                                EnvoyRegistry envoyRegistry,
                                MonitorBindingService monitorBindingService,
-                               AgentInstallApi agentInstallApi,
                                MeterRegistry meterRegistry,
                                KafkaTopicProperties kafkaTopicProperties,
+                               BoundAgentInstallRepository boundAgentInstallRepository,
                                @Value("${localhost.name}") String ourHostName) {
     this.retryTemplate = retryTemplate;
     this.envoyRegistry = envoyRegistry;
     this.monitorBindingService = monitorBindingService;
-    this.agentInstallApi = agentInstallApi;
     this.kafkaTopicProperties = kafkaTopicProperties;
     this.ourHostName = ourHostName;
+    this.boundAgentInstallRepository = boundAgentInstallRepository;
 
     eventsConsumed = meterRegistry.counter("eventsConsumed", "type", "AgentInstallChangeEvent");
     installInstructionFailed = meterRegistry.counter("installInstructionFailed");
@@ -108,12 +111,11 @@ public class AgentInstallsListener implements ConsumerSeekAware {
 
   private void processAgentInstallUpdate(AgentInstallChangeEvent event) {
 
-    final BoundAgentInstallDTO binding =
-        retryTemplate.execute(context ->
-            agentInstallApi
-                .getBindingForResourceAndAgentType(event.getTenantId(), event.getResourceId(),
-                    event.getAgentType()
-                ));
+    final BoundAgentInstallDTO binding = new BoundAgentInstallDTO(
+        boundAgentInstallRepository.findAllByTenantResourceAgentType(event.getTenantId(),
+            event.getResourceId(), event.getAgentType())
+            .stream().findFirst()
+            .orElseThrow(() -> new NotFoundException("Could find find agent install for given resource and agent type")));
 
     log.debug("Retrieved agentInstallBinding={} for processing event={}", binding, event);
 

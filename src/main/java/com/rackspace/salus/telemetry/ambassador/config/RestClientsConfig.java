@@ -17,8 +17,6 @@
 package com.rackspace.salus.telemetry.ambassador.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.rackspace.salus.acm.web.client.AgentInstallApi;
-import com.rackspace.salus.acm.web.client.AgentInstallApiClient;
 import com.rackspace.salus.monitor_management.web.client.MonitorApi;
 import com.rackspace.salus.monitor_management.web.client.MonitorApiClient;
 import com.rackspace.salus.monitor_management.web.client.ZoneApi;
@@ -68,12 +66,12 @@ public class RestClientsConfig {
     );
   }
 
-  @Bean
-  public AgentInstallApi agentInstallApi(RestTemplateBuilder restTemplateBuilder) {
-    return new AgentInstallApiClient(
-        restTemplateBuilder
-            .rootUri(servicesProperties.getAgentCatalogManagementUrl())
-            .build()
-    );
-  }
+//  @Bean
+//  public AgentInstallApi agentInstallApi(RestTemplateBuilder restTemplateBuilder) {
+//    return new AgentInstallApiClient(
+//        restTemplateBuilder
+//            .rootUri(servicesProperties.getAgentCatalogManagementUrl())
+//            .build()
+//    );
+//  }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Rackspace US, Inc.
+ * Copyright 2020 Rackspace US, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,7 +20,9 @@ import com.rackspace.salus.common.messaging.KafkaTopicProperties;
 import com.rackspace.salus.resource_management.web.client.ResourceApi;
 import com.rackspace.salus.resource_management.web.model.ResourceDTO;
 import com.rackspace.salus.telemetry.ambassador.types.ResourceKey;
+import com.rackspace.salus.telemetry.entities.Resource;
 import com.rackspace.salus.telemetry.messaging.ResourceEvent;
+import com.rackspace.salus.telemetry.repositories.ResourceRepository;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.net.InetAddress;
@@ -31,10 +33,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.common.TopicPartition;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.core.task.TaskExecutor;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.listener.ConsumerSeekAware;
-import org.springframework.retry.support.RetryTemplate;
 import org.springframework.stereotype.Service;
 
 /**
@@ -53,25 +53,21 @@ public class ResourceLabelsService implements ConsumerSeekAware {
   static final String GROUP_ID_PREFIX = "ambassador-resources-";
   private final KafkaTopicProperties kafkaTopicProperties;
   private final ResourceApi resourceApi;
-  private final RetryTemplate retryTemplate;
-  private final TaskExecutor taskExecutor;
 
   private final ConcurrentHashMap<ResourceKey, Map<String, String>/*labels*/> resources =
       new ConcurrentHashMap<>();
   private final Counter releasingUntracked;
   private final Counter failedLabelsPull;
+  private final ResourceRepository resourceRepository;
 
   @Autowired
   public ResourceLabelsService(KafkaTopicProperties kafkaTopicProperties, ResourceApi resourceApi,
-                               RetryTemplate retryTemplate, TaskExecutor taskExecutor,
-                               MeterRegistry meterRegistry) {
+                               MeterRegistry meterRegistry, ResourceRepository resourceRepository) {
     this.kafkaTopicProperties = kafkaTopicProperties;
     this.resourceApi = resourceApi;
-    this.retryTemplate = retryTemplate;
-    this.taskExecutor = taskExecutor;
-
-    releasingUntracked = meterRegistry.counter("error", "cause", "releasingUntrackedResource");
-    failedLabelsPull = meterRegistry.counter("error", "cause", "failedResourceLabelPull");
+    this.resourceRepository = resourceRepository;
+    releasingUntracked = meterRegistry.counter("errors", "cause", "releasingUntrackedResource");
+    failedLabelsPull = meterRegistry.counter("errors", "cause", "failedResourceLabelPull");
   }
 
   @SuppressWarnings({"unused", "WeakerAccess"}) // used by SpEL
@@ -85,7 +81,9 @@ public class ResourceLabelsService implements ConsumerSeekAware {
   }
 
   /**
-   * Indicate that a resource should be tracked for label changes
+   * Indicate that a resource should be tracked for label changes. It will also attempt to
+   * pull the currently known resource labels. A failed attempt is normal if it's a new
+   * envoy-resource and attach event has not yet propagated to resource manager.
    * @param tenantId the tenant owning the resource
    * @param resourceId the resourceId of the resource
    */
@@ -104,6 +102,8 @@ public class ResourceLabelsService implements ConsumerSeekAware {
    * @param resourceId the resourceId of the resource
    */
   void releaseResource(String tenantId, String resourceId) {
+    log.debug("Releasing resource labels for tenant={} resource={}", tenantId, resourceId);
+
     final Map<String, String> removed = resources.remove(new ResourceKey(tenantId, resourceId));
     if (removed == null) {
       log.warn("Released tenantId={} resourceId={} that wasn't being tracked", tenantId, resourceId);
@@ -112,39 +112,27 @@ public class ResourceLabelsService implements ConsumerSeekAware {
   }
 
   /**
-   * Asynchronously query the labels of the resource from resource management microservice and
-   * retry if the service throws an error
+   * Query the labels of the resource from resource management microservice.
+   * @return true if the resource labels were pulled successfully
    */
-  private void pullResource(ResourceKey key) {
+  private boolean pullResource(ResourceKey key) {
 
-    taskExecutor.execute(() -> {
-      final String tenantId = key.getTenantId();
-      final String resourceId = key.getResourceId();
+    final String tenantId = key.getTenantId();
+    final String resourceId = key.getResourceId();
 
-      log.debug("Pulling labels for tenantId={} resourceId={}", tenantId, resourceId);
+    log.debug("Pulling labels for tenantId={} resourceId={}", tenantId, resourceId);
 
-      final Map<String, String> resourceLabels = retryTemplate.execute(
-          retryContext -> {
+    final ResourceDTO resource = findResourceByTenantIdAndResourceId(tenantId, resourceId);
 
-            log.debug("Trying to query for tenantId={} resourceId={} try={}",
-                tenantId, resourceId, retryContext.getRetryCount());
-
-            final ResourceDTO resource = resourceApi.getByResourceId(tenantId, resourceId);
-
-            return resource.getLabels();
-          },
-          retryContext -> {
-            log.warn(
-                "Failed to pull resource labels for tenant={} resourceId={}", tenantId, resourceId);
-            failedLabelsPull.increment();
-            return null;
-          }
+    if (resource != null) {
+      log.debug("Retrieved labels for tenantId={} resourceId={}",
+          tenantId, resourceId
       );
-
-      if (resourceLabels != null) {
-        resources.put(key, resourceLabels);
-      }
-    });
+      resources.put(new ResourceKey(tenantId, resourceId), resource.getLabels());
+      return true;
+    } else {
+      return false;
+    }
   }
 
   /**
@@ -158,11 +146,15 @@ public class ResourceLabelsService implements ConsumerSeekAware {
   }
 
   @KafkaListener(topics = "#{__listener.topic}", groupId = "#{__listener.groupId}")
-  public void handResourceEvent(ResourceEvent event) {
+  public void handleResourceEvent(ResourceEvent event) {
     log.debug("Handling resource event={}", event);
     final ResourceKey key = new ResourceKey(event.getTenantId(), event.getResourceId());
     if (resources.containsKey(key)) {
-      pullResource(key);
+      if (!pullResource(key)) {
+        failedLabelsPull.increment();
+        log.warn("Failed to retrieve labels for tenant={} resource={} during resource event",
+            event.getTenantId(), event.getResourceId());
+      }
     }
   }
 
@@ -182,4 +174,11 @@ public class ResourceLabelsService implements ConsumerSeekAware {
   @Override
   public void onIdleContainer(Map<TopicPartition, Long> assignments,
                               ConsumerSeekCallback callback) { }
+
+  public ResourceDTO findResourceByTenantIdAndResourceId(String tenantId, String resourceId) {
+    Resource resource = resourceRepository.findByTenantIdAndResourceId(tenantId, resourceId)
+        .orElse(null);
+
+    return resource == null ? null : new ResourceDTO(resource, null);
+  }
 }
