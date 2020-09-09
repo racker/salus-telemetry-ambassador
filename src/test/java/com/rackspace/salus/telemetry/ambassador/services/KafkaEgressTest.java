@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Rackspace US, Inc.
+ * Copyright 2020 Rackspace US, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -96,7 +96,7 @@ public class KafkaEgressTest {
 
   @Test
   public void testMetricsEncodedAsSent() {
-    kafkaEgress.send("tenant-1", KafkaMessageType.METRIC, "{\"id\":1}");
+    kafkaEgress.send("tenant-1,r-1,m-1", KafkaMessageType.METRIC, "{\"id\":1}");
 
     final Consumer<String, String> consumer = buildConsumer(
         StringDeserializer.class,
@@ -108,7 +108,7 @@ public class KafkaEgressTest {
 
     // Use Hamcrest matchers provided by spring-kafka-test
     // https://docs.spring.io/spring-kafka/docs/2.2.4.RELEASE/reference/#hamcrest-matchers
-    assertThat(record, hasKey("tenant-1"));
+    assertThat(record, hasKey("tenant-1,r-1,m-1"));
     assertThat(record, hasValue("{\"id\":1}"));
   }
 

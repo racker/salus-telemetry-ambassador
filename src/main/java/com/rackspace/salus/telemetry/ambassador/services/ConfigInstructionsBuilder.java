@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Rackspace US, Inc.
+ * Copyright 2020 Rackspace US, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -78,13 +78,15 @@ public class ConfigInstructionsBuilder {
         .setContent(boundMonitor.getRenderedContent())
         .setInterval(convertIntervalToSeconds(boundMonitor.getInterval()));
 
-    opBuilder.putExtraLabels(LABEL_MONITOR_ID, boundMonitor.getMonitorId().toString());
-    opBuilder.putExtraLabels(LABEL_MONITOR_TYPE, boundMonitor.getMonitorType().toString());
+    if (!operationType.equals(OperationType.DELETE)) {
+      opBuilder.putExtraLabels(LABEL_MONITOR_ID, boundMonitor.getMonitorId().toString());
+      opBuilder.putExtraLabels(LABEL_MONITOR_TYPE, boundMonitor.getMonitorType().toString());
 
-    if (isRemoteMonitor(boundMonitor)) {
-      opBuilder.putExtraLabels(LABEL_TARGET_TENANT, boundMonitor.getTenantId());
-      opBuilder.putExtraLabels(LABEL_RESOURCE, boundMonitor.getResourceId());
-      opBuilder.putExtraLabels(LABEL_ZONE, boundMonitor.getZoneName());
+      if (isRemoteMonitor(boundMonitor)) {
+        opBuilder.putExtraLabels(LABEL_TARGET_TENANT, boundMonitor.getTenantId());
+        opBuilder.putExtraLabels(LABEL_RESOURCE, boundMonitor.getResourceId());
+        opBuilder.putExtraLabels(LABEL_ZONE, boundMonitor.getZoneName());
+      }
     }
 
     return this;

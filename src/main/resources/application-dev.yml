@@ -5,7 +5,6 @@ server:
 logging:
   level:
     com.rackspace.salus: debug
-    com.rackspace.salus.telemetry.ambassador.services.MonitorEventListener: trace
 salus:
   ambassador:
     public-zone-tenants:
@@ -14,3 +13,8 @@ salus:
     monitor-management-url: http://localhost:8089
     resource-management-url: http://localhost:8085
     agent-catalog-management-url: http://localhost:8090
+spring:
+  kafka:
+    listener:
+      # this will allow for us to start consumer of a particular topic before the producer
+      missing-topics-fatal: false

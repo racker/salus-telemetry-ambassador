@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Rackspace US, Inc.
+ * Copyright 2020 Rackspace US, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,6 +26,7 @@ import com.google.common.hash.Hashing;
 import com.rackspace.salus.monitor_management.web.model.BoundMonitorDTO;
 import com.rackspace.salus.services.TelemetryEdge;
 import com.rackspace.salus.services.TelemetryEdge.EnvoyInstruction;
+import com.rackspace.salus.services.TelemetryEdge.EnvoyInstructionReady;
 import com.rackspace.salus.services.TelemetryEdge.EnvoySummary;
 import com.rackspace.salus.telemetry.ambassador.config.AmbassadorProperties;
 import com.rackspace.salus.telemetry.ambassador.types.ResourceKey;
@@ -57,6 +58,7 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
@@ -81,8 +83,13 @@ public class EnvoyRegistry {
   private final Counter instructionsSentSuccessful;
   private final Counter instructionsSentFailed;
   private final HashFunction boundMonitorHashFunction;
+  private final Counter missingInstanceDuringRemove;
   private ConcurrentHashMap<String, EnvoyEntry> envoys = new ConcurrentHashMap<>();
   private ConcurrentHashMap<String, EnvoyEntry> envoysByResourceId = new ConcurrentHashMap<>();
+
+  static final String BAD_RESOURCE_ID_VALIDATION_MESSAGE =
+      "resourceId may only contain alphanumeric's, '.', ':', or '-'";
+  private static final Pattern resourceValidation = Pattern.compile("[A-Za-z0-9.:-]+");
 
   @SuppressWarnings("SpringJavaInjectionPointsAutowiringInspection")
   @Autowired
@@ -106,6 +113,8 @@ public class EnvoyRegistry {
     unauthorizedZoneCounter = meterRegistry.counter("attachErrors", "type", "unauthorizedZone");
     instructionsSentSuccessful = meterRegistry.counter("instructionsSent", "status", "success");
     instructionsSentFailed = meterRegistry.counter("instructionsSent", "status", "failed");
+    missingInstanceDuringRemove = meterRegistry.counter("registryIssues", "issue", "missingInstanceDuringRemove");
+    meterRegistry.gaugeMapSize("envoyCount", emptyList(), envoys);
   }
 
   private static <K, V> List<V> getOrCreate(HashMap<K, List<V>> map, K key) {
@@ -119,6 +128,10 @@ public class EnvoyRegistry {
 
   /**
    * Executed whenever we receive a new connection from an envoy.
+   * <p>
+   *   This method is asynchronous to avoid any cross-corruption of the GrpcContext since
+   *   both Envoy processing and etcd calls are gRPC based.
+   * </p>
    *
    * @param tenantId tenant of the attached Envoy
    * @param envoyId the Envoy's UUID
@@ -130,6 +143,10 @@ public class EnvoyRegistry {
   public CompletableFuture<?> attach(String tenantId, String envoyId, EnvoySummary envoySummary,
       SocketAddress remoteAddr, StreamObserver<EnvoyInstruction> instructionStreamObserver)
       throws StatusException {
+    final String resourceId = envoySummary.getResourceId();
+
+    log.debug("Processing attach tenant={} envoy={} resourceId={} remoteAddr={}",
+        tenantId, envoyId, resourceId, remoteAddr);
 
     final ResolvedZone zone;
     if (StringUtils.hasText(envoySummary.getZone())) {
@@ -153,9 +170,11 @@ public class EnvoyRegistry {
     final List<String> supportedAgentTypes = convertToStrings(
         envoySummary.getSupportedAgentsList());
 
-    final String resourceId = envoySummary.getResourceId();
     if (!StringUtils.hasText(resourceId)) {
       throw new StatusException(Status.INVALID_ARGUMENT.withDescription("resourceId is required"));
+    } else if (!resourceValidation.matcher(resourceId).matches()) {
+      throw new StatusException(Status.INVALID_ARGUMENT.withDescription(
+          BAD_RESOURCE_ID_VALIDATION_MESSAGE));
     }
 
     EnvoyEntry existingEntry = envoys.get(envoyId);
@@ -168,21 +187,24 @@ public class EnvoyRegistry {
       envoyLeaseTracking.revoke(envoyId);
     }
 
-    log.info(
-        "Attaching envoy tenantId={}, envoyId={} from remoteAddr={} with resourceId={}, zone={}, labels={}, supports agents={}",
-        tenantId, envoyId, remoteAddr, resourceId, zone, envoyLabels, supportedAgentTypes);
+    resourceLabelsService.trackResource(tenantId, resourceId);
 
-    return envoyLeaseTracking.grant(envoyId)
+    return envoyLeaseTracking.grant(envoyId, appProperties.getEnvoyLeaseDuration().toSeconds())
         .thenApply(leaseId -> {
           final EnvoyEntry entry = new EnvoyEntry(
               instructionStreamObserver, tenantId, envoyId, resourceId);
           envoys.put(envoyId, entry);
           envoysByResourceId.put(resourceId, entry);
+          log.debug("Tracking entry for envoyInstance={} with resourceId={}", envoyId, resourceId);
           return leaseId;
         })
         .thenCompose(leaseId ->
             // register in zone if not null or passes through otherwise
             registerInZone(envoyId, resourceId, zone, leaseId))
+        .thenApply(leaseId -> {
+            sendReadyInstruction(envoyId, instructionStreamObserver);
+            return leaseId;
+        })
         .thenCompose(leaseId ->
             postAttachEvent(tenantId, envoyId, envoySummary, envoyLabels, remoteAddr)
                 .thenApply(sendResult -> {
@@ -204,6 +226,19 @@ public class EnvoyRegistry {
         )
         ;
 
+  }
+
+  private void sendReadyInstruction(String envoyId,
+                                    StreamObserver<EnvoyInstruction> instructionStreamObserver) {
+    log.debug("Sending ready instruction to envoy={}", envoyId);
+    synchronized (instructionStreamObserver) {
+      instructionStreamObserver.onNext(
+          EnvoyInstruction.newBuilder()
+              .setReady(EnvoyInstructionReady.newBuilder().build())
+              .build()
+      );
+      instructionsSentSuccessful.increment();
+    }
   }
 
   private CompletionStage<Long> registerInZone(String envoyId, String resourceId,
@@ -258,36 +293,45 @@ public class EnvoyRegistry {
         .collect(Collectors.toList());
   }
 
-  @Scheduled(fixedDelayString = "${ambassador.envoyRefreshInterval:PT10S}")
+  @Scheduled(fixedDelayString = "#{ambassadorProperties.envoyRefreshInterval}")
   public void refreshEnvoys() {
 
-    envoys.forEachKey(appProperties.getEnvoyRefreshParallelism(), instanceId -> {
-      final EnvoyEntry envoyEntry = envoys.get(instanceId);
-
-      if (envoyEntry != null) {
-        try {
-          synchronized (envoyEntry.instructionStream) {
-            envoyEntry.instructionStream
-                .onNext(TelemetryEdge.EnvoyInstruction.newBuilder()
-                    .setRefresh(
-                        TelemetryEdge.EnvoyInstructionRefresh.newBuilder().build()
-                    )
-                    .build());
-          }
-        } catch (Exception e) {
-          // Most likely exceptions are due to the gRPC connection being closed by
-          // Envoy connection loss or failure to establish attachment. The later
-          // gets thrown as an IllegalStateException.
-          processFailedSend(instanceId, e);
+    envoys.forEach(appProperties.getEnvoyRefreshParallelism(), (instanceId, envoyEntry) -> {
+      try {
+        synchronized (envoyEntry.instructionStream) {
+          envoyEntry.instructionStream
+              .onNext(TelemetryEdge.EnvoyInstruction.newBuilder()
+                  .setRefresh(
+                      TelemetryEdge.EnvoyInstructionRefresh.newBuilder().build()
+                  )
+                  .build());
         }
+      } catch (Exception e) {
+        // Most likely exceptions are due to the gRPC connection being closed by
+        // Envoy connection loss or failure to establish attachment. The later
+        // gets thrown as an IllegalStateException.
+        processFailedSend(instanceId, e);
       }
     });
   }
 
+  /**
+   * <p>
+   * Runs async to avoid cross-interactions with the etcd operations that also use
+   * grpc context, which seems to be stored in thread-local storage
+   * </p>
+   * @param instanceId
+   */
   public void remove(String instanceId) {
+    log.debug("Removing registration of envoyInstance={}", instanceId);
     final EnvoyEntry entry = envoys.remove(instanceId);
+    if (entry != null) {
+      resourceLabelsService.releaseResource(entry.getTenantId(), entry.getResourceId());
+    } else {
+      log.warn("Unable to locate envoy entry for instance={}", instanceId);
+      missingInstanceDuringRemove.increment();
+    }
     envoyLeaseTracking.revoke(instanceId);
-    resourceLabelsService.releaseResource(entry.getTenantId(), entry.getResourceId());
   }
 
   private void processFailedSend(String instanceId, Exception e) {
@@ -433,31 +477,7 @@ public class EnvoyRegistry {
 
     } // end of synchronized block
 
-    updateResourceLabelTracking(resourcesToRetain, changes);
-
     return changes;
-  }
-
-  private void updateResourceLabelTracking(
-      Set<ResourceKey> resourcesToRetain,
-      HashMap<OperationType, List<BoundMonitorDTO>> changes) {
-
-    changes.getOrDefault(OperationType.CREATE, emptyList()).stream()
-        .map(EnvoyRegistry::buildResourceKey)
-        .distinct()
-        .forEach(resourceKey -> {
-          resourceLabelsService
-              .trackResource(resourceKey.getTenantId(), resourceKey.getResourceId()
-              );
-        });
-    changes.getOrDefault(OperationType.DELETE, emptyList()).stream()
-        .map(EnvoyRegistry::buildResourceKey)
-        .filter(resourceKey -> !resourcesToRetain.contains(resourceKey))
-        .distinct()
-        .forEach(resourceKey -> {
-          resourceLabelsService
-              .releaseResource(resourceKey.getTenantId(), resourceKey.getResourceId());
-        });
   }
 
   /**

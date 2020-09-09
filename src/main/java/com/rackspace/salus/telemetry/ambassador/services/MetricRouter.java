@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Rackspace US, Inc.
+ * Copyright 2020 Rackspace US, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -31,12 +31,14 @@ import java.time.Instant;
 import java.time.format.DateTimeFormatter;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.avro.Schema;
 import org.apache.avro.io.EncoderFactory;
 import org.apache.avro.io.JsonEncoder;
 import org.apache.avro.specific.SpecificDatumWriter;
+import org.apache.logging.log4j.util.Strings;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -66,7 +68,7 @@ public class MetricRouter {
         universalTimestampFormatter = DateTimeFormatter.ISO_INSTANT;
 
         metricsRouted = meterRegistry.counter("routed", "type", "metrics");
-        missingResourceLabelTracking = meterRegistry.counter("error", "cause", "missingResourceLabelTracking");
+        missingResourceLabelTracking = meterRegistry.counter("errors", "cause", "missingResourceLabelTracking");
     }
 
     public void route(String tenantId, String envoyId,
@@ -86,13 +88,14 @@ public class MetricRouter {
         // resource of the monitor.
 
         String resourceId = tagsMap.remove(ConfigInstructionsBuilder.LABEL_RESOURCE);
+        final String measurementName = nameTagValue.getName();
         if (resourceId == null) {
             resourceId = envoyRegistry.getResourceId(envoyId);
 
             if (resourceId == null) {
                 log.warn("Unable to locate resourceId while routing"
                         + " measurement={} for tenant={} envoy={} tags={}",
-                    nameTagValue.getName(), tenantId, envoyId, nameTagValue.getTagsMap());
+                    measurementName, tenantId, envoyId, nameTagValue.getTagsMap());
                 return;
             }
         }
@@ -119,9 +122,9 @@ public class MetricRouter {
             .setDevice(resourceId)
             .setDeviceMetadata(labels)
             .setMonitoringSystem(MonitoringSystem.SALUS)
-            .setSystemMetadata(Collections.singletonMap("envoyId", envoyId))
+            .setSystemMetadata(Collections.singletonMap("envoy_id", envoyId))
             .setCollectionMetadata(tagsMap)
-            .setCollectionName(nameTagValue.getName())
+            .setCollectionName(measurementName)
             .setFvalues(nameTagValue.getFvaluesMap())
             .setSvalues(nameTagValue.getSvaluesMap())
             .setIvalues(Collections.emptyMap())
@@ -138,7 +141,8 @@ public class MetricRouter {
             jsonEncoder.flush();
 
             metricsRouted.increment();
-            kafkaEgress.send(tenantId, KafkaMessageType.METRIC, out.toString(StandardCharsets.UTF_8.name()));
+            kafkaEgress.send(Strings.join(List.of(tenantId, resourceId, measurementName), ','),
+                KafkaMessageType.METRIC, out.toString(StandardCharsets.UTF_8.name()));
 
         } catch (IOException|NullPointerException e) {
             log.warn("Failed to Avro encode avroMetric={} original={}", externalMetric, postedMetric, e);

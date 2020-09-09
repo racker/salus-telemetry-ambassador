@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Rackspace US, Inc.
+ * Copyright 2020 Rackspace US, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,10 +17,14 @@
 package com.rackspace.salus.telemetry.ambassador.services;
 
 import com.rackspace.salus.common.messaging.KafkaTopicProperties;
+import com.rackspace.salus.monitor_management.web.client.MonitorApi;
 import com.rackspace.salus.services.TelemetryEdge;
 import com.rackspace.salus.services.TelemetryEdge.EnvoyInstruction;
 import com.rackspace.salus.services.TelemetryEdge.EnvoyInstructionTestMonitor;
+import com.rackspace.salus.services.TelemetryEdge.TestMonitorResults;
 import com.rackspace.salus.telemetry.messaging.TestMonitorRequestEvent;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -33,18 +37,34 @@ public class TestMonitorEventListener {
 
   private final EnvoyRegistry envoyRegistry;
   private final KafkaTopicProperties kafkaTopicProperties;
+  private final TestMonitorResultsProducer resultsProducer;
+  private final MonitorApi monitorApi;
   private final String appName;
   private final String ourHostName;
+  private final Counter requestsCounter;
+  private final Counter missingAgentCounter;
+  private final Counter failedTranslateCounter;
 
   @Autowired
   public TestMonitorEventListener(EnvoyRegistry envoyRegistry,
                                   KafkaTopicProperties kafkaTopicProperties,
+                                  TestMonitorResultsProducer resultsProducer,
+                                  MonitorApi monitorApi,
+                                  MeterRegistry meterRegistry,
                                   @Value("${spring.application.name}") String appName,
                                   @Value("${localhost.name}") String ourHostName) {
     this.envoyRegistry = envoyRegistry;
     this.kafkaTopicProperties = kafkaTopicProperties;
+    this.resultsProducer = resultsProducer;
+    this.monitorApi = monitorApi;
     this.appName = appName;
     this.ourHostName = ourHostName;
+
+    requestsCounter = meterRegistry.counter("testMonitorListenerRequests");
+    missingAgentCounter = meterRegistry.counter("testMonitorListenerErrors",
+        "type", "missingAgent");
+    failedTranslateCounter = meterRegistry.counter("testMonitorListenerErrors",
+        "type", "failedTranslate");
   }
 
   @SuppressWarnings("unused") // in @KafkaListener SpEL
@@ -65,15 +85,51 @@ public class TestMonitorEventListener {
       log.trace("Discarded testMonitorEvent={} for unregistered Envoy", event);
       return;
     }
+    requestsCounter.increment();
 
     log.debug("Handling testMonitorEvent={}", event);
+
+    final String installedAgentVersion =
+        envoyRegistry.getInstalledAgentVersions(envoyId)
+            .get(event.getAgentType());
+
+    // immediately reject test monitor if no version of given agent type is installed
+    if (installedAgentVersion == null) {
+      missingAgentCounter.increment();
+      resultsProducer.send(
+          TestMonitorResults.newBuilder()
+              .setCorrelationId(event.getCorrelationId())
+              .addErrors("Agent is not installed")
+              .build()
+      );
+      return;
+    }
+
+    final String translatedContent;
+    try {
+      translatedContent = monitorApi.translateMonitorContent(
+          event.getAgentType(), installedAgentVersion,
+          event.getMonitorType(), event.getScope(), event.getRenderedContent()
+      );
+    } catch (Exception e) {
+      failedTranslateCounter.increment();
+      log.warn("Unexpected exception while translating test-monitor content for correlationId={}",
+          event.getCorrelationId(), e);
+      resultsProducer.send(
+          TestMonitorResults.newBuilder()
+              .setCorrelationId(event.getCorrelationId())
+              .addErrors("Internal error: " + e.getMessage())
+              .build()
+      );
+      return;
+    }
 
     EnvoyInstruction testMonitorInstruction = EnvoyInstruction.newBuilder()
         .setTestMonitor(
             EnvoyInstructionTestMonitor.newBuilder()
                 .setAgentType(TelemetryEdge.AgentType.valueOf(event.getAgentType().name()))
                 .setCorrelationId(event.getCorrelationId())
-                .setContent(event.getRenderedContent())
+                .setContent(translatedContent)
                 .setTimeout(event.getTimeout())
         )
         .build();

@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Rackspace US, Inc.
+ * Copyright 2020 Rackspace US, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 
 package com.rackspace.salus.telemetry.ambassador.services;
 
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.equalTo;
@@ -28,13 +29,13 @@ import static org.junit.Assert.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import com.rackspace.salus.monitor_management.web.model.BoundMonitorDTO;
 import com.rackspace.salus.services.TelemetryEdge.EnvoyInstruction;
+import com.rackspace.salus.services.TelemetryEdge.EnvoyInstructionReady;
 import com.rackspace.salus.services.TelemetryEdge.EnvoySummary;
 import com.rackspace.salus.telemetry.ambassador.config.AmbassadorProperties;
 import com.rackspace.salus.telemetry.ambassador.config.GrpcConfig;
@@ -77,6 +78,7 @@ import org.springframework.util.concurrent.ListenableFuture;
 @SpringBootTest(classes = {
     EnvoyRegistry.class,
     AmbassadorProperties.class,
+    TestAsyncConfig.class,
     GrpcConfig.class,
     SimpleMeterRegistry.class
 })
@@ -112,12 +114,12 @@ public class EnvoyRegistryTest {
   @Test
   public void postsAttachEventOnAttach() throws StatusException {
     final EnvoySummary envoySummary = EnvoySummary.newBuilder()
-        .setResourceId("hostname:test-host")
+        .setResourceId("hostname:test-host.com")
         .putLabels("discovered_os", "linux")
         .build();
 
     final CompletableFuture<Long> assignedLease = CompletableFuture.completedFuture(1234L);
-    when(envoyLeaseTracking.grant(any()))
+    when(envoyLeaseTracking.grant(anyString(), anyLong()))
         .thenReturn(assignedLease);
 
     when(envoyResourceManagement.registerResource(any(), any(), anyLong(), any(), any(), any()))
@@ -140,12 +142,32 @@ public class EnvoyRegistryTest {
     verify(eventProducer)
         .sendAttach(
             new AttachEvent()
-                .setResourceId("hostname:test-host")
+                .setResourceId("hostname:test-host.com")
                 .setLabels(Collections.singletonMap("agent_discovered_os", "linux"))
                 .setEnvoyId("e-1")
                 .setTenantId("t-1")
                 .setEnvoyAddress("localhost")
         );
+
+    final EnvoyInstruction readyInstruction = EnvoyInstruction.newBuilder()
+        .setReady(EnvoyInstructionReady.newBuilder().build())
+        .build();
+    verify(streamObserver).onNext(readyInstruction);
+  }
+
+  @Test
+  public void postsAttachEventOnAttachFailsWithBadResourceId() throws StatusException {
+    final EnvoySummary envoySummary = EnvoySummary.newBuilder()
+        .setResourceId("$hostname:test-host")
+        .putLabels("discovered_os", "linux")
+        .build();
+
+    assertThatThrownBy(() -> envoyRegistry.attach("t-1", "e-1", envoySummary,
+      InetSocketAddress.createUnresolved("localhost", 60000), streamObserver
+    ).join())
+        .isInstanceOf(StatusException.class)
+        .hasMessageContaining(EnvoyRegistry.BAD_RESOURCE_ID_VALIDATION_MESSAGE);
+
   }
 
   @SuppressWarnings("unchecked")
@@ -158,7 +180,7 @@ public class EnvoyRegistryTest {
         .build();
 
     final CompletableFuture<Long> assignedLease = CompletableFuture.completedFuture(1234L);
-    when(envoyLeaseTracking.grant(any()))
+    when(envoyLeaseTracking.grant(anyString(), anyLong()))
         .thenReturn(assignedLease);
 
     when(envoyResourceManagement.registerResource(any(), any(), anyLong(), any(), any(), any()))
@@ -200,6 +222,9 @@ public class EnvoyRegistryTest {
                 .setEnvoyAddress("localhost")
         );
 
+    verify(resourceLabelsService)
+        .trackResource("t-1", "hostname:test-host");
+
     verifyNoMoreInteractions(eventProducer, zoneAuthorizer, zoneStorage, resourceLabelsService);
   }
 
@@ -212,7 +237,7 @@ public class EnvoyRegistryTest {
         .build();
 
     final CompletableFuture<Long> assignedLease = CompletableFuture.completedFuture(1234L);
-    when(envoyLeaseTracking.grant(any()))
+    when(envoyLeaseTracking.grant(anyString(), anyLong()))
         .thenReturn(assignedLease);
 
     when(envoyResourceManagement.registerResource(any(), any(), anyLong(), any(), any(), any()))
@@ -250,6 +275,9 @@ public class EnvoyRegistryTest {
                 .setTenantId("t-1")
                 .setEnvoyAddress("localhost")
         );
+
+    verify(resourceLabelsService)
+        .trackResource("t-1", "hostname:test-host");
 
     verifyNoMoreInteractions(eventProducer, zoneAuthorizer, zoneStorage, resourceLabelsService);
   }
@@ -408,13 +436,6 @@ public class EnvoyRegistryTest {
       ));
     }
 
-    verify(resourceLabelsService, times(2)).trackResource("t-1", "r-1");
-    verify(resourceLabelsService).trackResource("t-1", "r-2");
-    verify(resourceLabelsService).trackResource("t-1", "r-3");
-    verify(resourceLabelsService).trackResource("t-1", "r-4");
-    verify(resourceLabelsService).trackResource("t-1", "r-5");
-    verify(resourceLabelsService).releaseResource("t-1", "r-2");
-
     verifyNoMoreInteractions(resourceLabelsService);
   }
 
@@ -473,8 +494,6 @@ public class EnvoyRegistryTest {
       ));
       assertThat(changes, not(hasKey(OperationType.DELETE)));
     }
-
-    verify(resourceLabelsService).trackResource("t-1", "r-1");
 
     verifyNoMoreInteractions(resourceLabelsService);
   }

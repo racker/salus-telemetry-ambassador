@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Rackspace US, Inc.
+ * Copyright 2020 Rackspace US, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,12 +33,13 @@ import io.grpc.stub.ServerCallStreamObserver;
 import io.grpc.stub.StreamObserver;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import java.net.SocketAddress;
+import java.time.Duration;
+import java.time.Instant;
 import lombok.extern.slf4j.Slf4j;
 import org.lognet.springboot.grpc.GRpcService;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.core.task.TaskExecutor;
 
 @GRpcService
 @Slf4j
@@ -47,7 +48,6 @@ public class EnvoyAmbassadorService extends TelemetryAmbassadorImplBase {
     private final LogEventRouter logEventRouter;
     private final MetricRouter metricRouter;
     private final TestMonitorResultsProducer testMonitorResultsProducer;
-    private final TaskExecutor taskExecutor;
 
     // metrics counters
     private final Counter envoyAttach;
@@ -55,6 +55,7 @@ public class EnvoyAmbassadorService extends TelemetryAmbassadorImplBase {
     private final Counter postLog;
     private final Counter keepAlive;
     private final Counter exceptions;
+    private final Timer attachDuration;
 
 
     @Autowired
@@ -62,34 +63,45 @@ public class EnvoyAmbassadorService extends TelemetryAmbassadorImplBase {
                                   LogEventRouter logEventRouter,
                                   MetricRouter metricRouter,
                                   TestMonitorResultsProducer testMonitorResultsProducer,
-                                  @Qualifier("taskExecutor") TaskExecutor taskExecutor,
                                   MeterRegistry meterRegistry) {
         this.envoyRegistry = envoyRegistry;
         this.logEventRouter = logEventRouter;
         this.metricRouter = metricRouter;
         this.testMonitorResultsProducer = testMonitorResultsProducer;
-        this.taskExecutor = taskExecutor;
 
         envoyAttach = meterRegistry.counter("messages","operation", "attach");
+        attachDuration = meterRegistry.timer("attachDuration");
         postLog = meterRegistry.counter("messages","operation", "postLog");
         messagesPost = meterRegistry.counter("messages","operation", "postMetric");
         keepAlive = meterRegistry.counter("messages","operation", "keepAlive");
-        exceptions = meterRegistry.counter("exceptions", "errors", "exceptions");
+        exceptions = meterRegistry.counter("errors", "cause", "unhandledException");
     }
 
     @Override
     public void attachEnvoy(EnvoySummary request, StreamObserver<EnvoyInstruction> responseObserver) {
         final SocketAddress remoteAddr = GrpcContextDetails.getCallerRemoteAddress();
         final String envoyId = GrpcContextDetails.getCallerEnvoyId();
+        final String tenantId = GrpcContextDetails.getCallerTenantId();
+        final String resourceId = request.getResourceId();
 
-        registerCancelHandler(envoyId, remoteAddr, responseObserver);
+        final Instant attachStartTime = Instant.now();
+
+        registerCancelHandler(tenantId, resourceId, envoyId, remoteAddr, responseObserver);
         envoyAttach.increment();
         try {
-            envoyRegistry.attach(GrpcContextDetails.getCallerTenantId(), envoyId, request, remoteAddr, responseObserver).join();
+            envoyRegistry.attach(
+                tenantId, envoyId, request, remoteAddr, responseObserver
+            )
+                .thenApply(o -> {
+                    attachDuration.record(Duration.between(attachStartTime, Instant.now()));
+                    return o;
+                })
+                .join();
         } catch (StatusException e) {
             responseObserver.onError(e);
         } catch (Exception e) {
-            log.error("Unhandled exception occurred in envoy attach", e);
+            log.error("Unhandled exception occurred in resourceId={} envoy={} attach for tenant={}",
+                resourceId, envoyId, tenantId, e);
             exceptions.increment();
             responseObserver.onError(
                 new StatusException(Status.UNKNOWN
@@ -98,18 +110,19 @@ public class EnvoyAmbassadorService extends TelemetryAmbassadorImplBase {
         }
     }
 
-    private void registerCancelHandler(String instanceId, SocketAddress remoteAddr, StreamObserver<EnvoyInstruction> responseObserver) {
+    private void registerCancelHandler(String tenantId, String resourceId, String instanceId,
+                                       SocketAddress remoteAddr,
+                                       StreamObserver<EnvoyInstruction> responseObserver) {
         if (responseObserver instanceof ServerCallStreamObserver) {
             ((ServerCallStreamObserver<EnvoyInstruction>) responseObserver).setOnCancelHandler(() -> {
-                // run async to avoid cross-interactions with the etcd operations that also use grpc
-                taskExecutor.execute(() -> {
-                    log.info("Removing cancelled envoy={} address={}", instanceId, remoteAddr);
-                    try {
-                        envoyRegistry.remove(instanceId);
-                    } catch (Exception e) {
-                        log.warn("Trying to remove envoy={} from registry", instanceId, e);
-                    }
-                });
+                log.info("Removing cancelled resourceId={} envoy={} for tenant={} at address={}",
+                    resourceId, instanceId, tenantId, remoteAddr);
+                try {
+                    envoyRegistry.remove(instanceId);
+                } catch (Exception e) {
+                    log.warn("Trying to remove resourceId={} envoy={} for tenant={} from registry",
+                        resourceId, instanceId, tenantId, e);
+                }
             });
         }
     }
