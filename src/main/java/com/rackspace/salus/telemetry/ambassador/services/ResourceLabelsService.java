@@ -20,7 +20,9 @@ import com.rackspace.salus.common.messaging.KafkaTopicProperties;
 import com.rackspace.salus.resource_management.web.client.ResourceApi;
 import com.rackspace.salus.resource_management.web.model.ResourceDTO;
 import com.rackspace.salus.telemetry.ambassador.types.ResourceKey;
+import com.rackspace.salus.telemetry.entities.Resource;
 import com.rackspace.salus.telemetry.messaging.ResourceEvent;
+import com.rackspace.salus.telemetry.repositories.ResourceRepository;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.net.InetAddress;
@@ -56,13 +58,14 @@ public class ResourceLabelsService implements ConsumerSeekAware {
       new ConcurrentHashMap<>();
   private final Counter releasingUntracked;
   private final Counter failedLabelsPull;
+  private final ResourceRepository resourceRepository;
 
   @Autowired
   public ResourceLabelsService(KafkaTopicProperties kafkaTopicProperties, ResourceApi resourceApi,
-                               MeterRegistry meterRegistry) {
+                               MeterRegistry meterRegistry, ResourceRepository resourceRepository) {
     this.kafkaTopicProperties = kafkaTopicProperties;
     this.resourceApi = resourceApi;
-
+    this.resourceRepository = resourceRepository;
     releasingUntracked = meterRegistry.counter("errors", "cause", "releasingUntrackedResource");
     failedLabelsPull = meterRegistry.counter("errors", "cause", "failedResourceLabelPull");
   }
@@ -119,7 +122,7 @@ public class ResourceLabelsService implements ConsumerSeekAware {
 
     log.debug("Pulling labels for tenantId={} resourceId={}", tenantId, resourceId);
 
-    final ResourceDTO resource = resourceApi.getByResourceId(tenantId, resourceId);
+    final ResourceDTO resource = findResourceByTenantIdAndResourceId(tenantId, resourceId);
 
     if (resource != null) {
       log.debug("Retrieved labels for tenantId={} resourceId={}",
@@ -171,4 +174,10 @@ public class ResourceLabelsService implements ConsumerSeekAware {
   @Override
   public void onIdleContainer(Map<TopicPartition, Long> assignments,
                               ConsumerSeekCallback callback) { }
+
+  public ResourceDTO findResourceByTenantIdAndResourceId(String tenantId, String resourceId) {
+    return resourceRepository.findByTenantIdAndResourceId(tenantId, resourceId)
+        .map(resource -> new ResourceDTO(resource, null))
+        .orElse(null);
+  }
 }

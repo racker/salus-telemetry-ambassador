@@ -29,9 +29,13 @@ import static org.mockito.Mockito.when;
 import com.rackspace.salus.common.messaging.KafkaTopicProperties;
 import com.rackspace.salus.resource_management.web.client.ResourceApi;
 import com.rackspace.salus.resource_management.web.model.ResourceDTO;
+import com.rackspace.salus.telemetry.entities.Resource;
 import com.rackspace.salus.telemetry.messaging.ResourceEvent;
+import com.rackspace.salus.telemetry.repositories.ResourceRepository;
 import java.net.UnknownHostException;
 import java.util.Map;
+import java.util.Optional;
+import org.checkerframework.checker.nullness.Opt;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -59,6 +63,9 @@ public class ResourceLabelsServiceTest {
   @MockBean
   ResourceApi resourceApi;
 
+  @MockBean
+  ResourceRepository resourceRepository;
+
   @Test
   public void testKafkaFields() throws UnknownHostException {
     assertThat(resourceLabelsService.getGroupId(), startsWith(ResourceLabelsService.GROUP_ID_PREFIX));
@@ -69,10 +76,10 @@ public class ResourceLabelsServiceTest {
   public void test_releaseResource() {
     final Map<String, String> expectedLabels = singletonMap("agent_discovered_os", "linux");
 
-    when(resourceApi.getByResourceId("t-1", "r-1"))
+    when(resourceRepository.findByTenantIdAndResourceId("t-1", "r-1"))
         .thenReturn(
-            new ResourceDTO()
-                .setLabels(expectedLabels)
+            Optional.of(new Resource()
+                .setLabels(expectedLabels))
         );
 
     resourceLabelsService.trackResource("t-1", "r-1");
@@ -89,7 +96,7 @@ public class ResourceLabelsServiceTest {
 
     assertThat(afterRelease, nullValue());
 
-    verify(resourceApi).getByResourceId("t-1", "r-1");
+    verify(resourceRepository).findByTenantIdAndResourceId("t-1", "r-1");
 
     verifyNoMoreInteractions(resourceApi);
   }
@@ -116,9 +123,9 @@ public class ResourceLabelsServiceTest {
   @Test
   public void test_handleResourceEvent_tracking() {
 
-    when(resourceApi.getByResourceId("t-1", "r-1"))
-        .thenReturn(new ResourceDTO().setLabels(singletonMap("env", "pre")))
-        .thenReturn(new ResourceDTO().setLabels(singletonMap("env", "post")));
+    when(resourceRepository.findByTenantIdAndResourceId("t-1", "r-1"))
+        .thenReturn(Optional.of(new Resource().setLabels(singletonMap("env", "pre"))))
+        .thenReturn(Optional.of(new Resource().setLabels(singletonMap("env", "post"))));
 
     resourceLabelsService.trackResource("t-1", "r-1");
 
@@ -136,15 +143,15 @@ public class ResourceLabelsServiceTest {
         .getResourceLabels("t-1", "r-1");
     assertThat(postLabels, equalTo(singletonMap("env", "post")));
 
-    verify(resourceApi, times(2)).getByResourceId("t-1", "r-1");
+    verify(resourceRepository, times(2)).findByTenantIdAndResourceId("t-1", "r-1");
 
     verifyNoMoreInteractions(resourceApi);
   }
 
   @Test
   public void test_trackResource_beforeResourceManagerAwareness() {
-    when(resourceApi.getByResourceId("t-1", "r-1"))
-        .thenReturn(null);
+    when(resourceRepository.findByTenantIdAndResourceId("t-1", "r-1"))
+        .thenReturn(Optional.empty());
 
     resourceLabelsService.trackResource("t-1", "r-1");
 
@@ -153,7 +160,7 @@ public class ResourceLabelsServiceTest {
     // will be the default empty map created when tracking
     assertThat(labels, equalTo(Map.of()));
 
-    verify(resourceApi).getByResourceId("t-1", "r-1");
+    verify(resourceRepository).findByTenantIdAndResourceId("t-1", "r-1");
 
     verifyNoMoreInteractions(resourceApi);
   }
@@ -161,9 +168,9 @@ public class ResourceLabelsServiceTest {
   @Test
   public void test_handleResourceEvent_failedPull() {
 
-    when(resourceApi.getByResourceId("t-1", "r-1"))
-        .thenReturn(new ResourceDTO().setLabels(singletonMap("env", "pre")))
-        .thenReturn(null);
+    when(resourceRepository.findByTenantIdAndResourceId("t-1", "r-1"))
+        .thenReturn(Optional.of(new Resource().setLabels(singletonMap("env", "pre"))))
+        .thenReturn(Optional.empty());
 
     resourceLabelsService.trackResource("t-1", "r-1");
 
@@ -182,7 +189,7 @@ public class ResourceLabelsServiceTest {
         .getResourceLabels("t-1", "r-1");
     assertThat(postLabels, equalTo(singletonMap("env", "pre")));
 
-    verify(resourceApi, times(2)).getByResourceId("t-1", "r-1");
+    verify(resourceRepository, times(2)).findByTenantIdAndResourceId("t-1", "r-1");
 
     verifyNoMoreInteractions(resourceApi);
   }

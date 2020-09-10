@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Rackspace US, Inc.
+ * Copyright 2020 Rackspace US, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,17 +23,18 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
-import com.rackspace.salus.acm.web.client.AgentInstallApi;
-import com.rackspace.salus.acm.web.model.AgentInstallDTO;
-import com.rackspace.salus.acm.web.model.AgentReleaseDTO;
-import com.rackspace.salus.acm.web.model.BoundAgentInstallDTO;
 import com.rackspace.salus.common.messaging.KafkaTopicProperties;
 import com.rackspace.salus.services.TelemetryEdge;
 import com.rackspace.salus.services.TelemetryEdge.EnvoyInstruction;
 import com.rackspace.salus.services.TelemetryEdge.EnvoyInstructionInstall;
+import com.rackspace.salus.telemetry.entities.AgentInstall;
+import com.rackspace.salus.telemetry.entities.AgentRelease;
+import com.rackspace.salus.telemetry.entities.BoundAgentInstall;
 import com.rackspace.salus.telemetry.messaging.AgentInstallChangeEvent;
 import com.rackspace.salus.telemetry.messaging.OperationType;
 import com.rackspace.salus.telemetry.model.AgentType;
+import com.rackspace.salus.telemetry.repositories.BoundAgentInstallRepository;
+import java.util.List;
 import java.util.Map;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -47,6 +48,8 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.retry.policy.SimpleRetryPolicy;
 import org.springframework.retry.support.RetryTemplate;
 import org.springframework.test.context.junit4.SpringRunner;
+import uk.co.jemos.podam.api.PodamFactory;
+import uk.co.jemos.podam.api.PodamFactoryImpl;
 
 @RunWith(SpringRunner.class)
 @SpringBootTest(classes = {
@@ -72,7 +75,7 @@ public class AgentInstallsListenerTest {
   EnvoyRegistry envoyRegistry;
 
   @MockBean
-  AgentInstallApi agentInstallApi;
+  BoundAgentInstallRepository boundAgentInstallRepository;
 
   @MockBean
   MonitorBindingService monitorBindingService;
@@ -82,6 +85,8 @@ public class AgentInstallsListenerTest {
 
   @Autowired
   AgentInstallsListener agentInstallsListener;
+
+  private PodamFactory podamFactory = new PodamFactoryImpl();
 
   @Test
   public void testGroupId() {
@@ -112,20 +117,19 @@ public class AgentInstallsListenerTest {
     when(envoyRegistry.trackAgentInstall(any(), any(), any()))
         .thenReturn(Map.of(AgentType.TELEGRAF, "VERSION"));
 
-    AgentReleaseDTO release = new AgentReleaseDTO()
+    AgentRelease release = podamFactory.manufacturePojo(AgentRelease.class)
         .setType(AgentType.TELEGRAF)
         .setVersion("VERSION")
         .setUrl("URL")
         .setExe("EXE");
-    AgentInstallDTO install = new AgentInstallDTO()
+    AgentInstall install = podamFactory.manufacturePojo(AgentInstall.class)
         .setTenantId("t-1")
         .setAgentRelease(release);
-    when(agentInstallApi.getBindingForResourceAndAgentType(any(), any(), any()))
-        .thenReturn(
-            new BoundAgentInstallDTO()
-            .setResourceId("r-1")
-            .setAgentInstall(install)
-        );
+    BoundAgentInstall boundAgentInstall = podamFactory.manufacturePojo(BoundAgentInstall.class)
+        .setResourceId("r-1")
+        .setAgentInstall(install);
+    when(boundAgentInstallRepository.findAllByTenantResourceAgentType(any(), any(), any()))
+        .thenReturn(List.of(boundAgentInstall));
 
     // EXECUTE
 
@@ -139,7 +143,7 @@ public class AgentInstallsListenerTest {
 
     // VERIFY
 
-    verify(agentInstallApi).getBindingForResourceAndAgentType("t-1", "r-1", AgentType.TELEGRAF);
+    verify(boundAgentInstallRepository).findAllByTenantResourceAgentType("t-1", "r-1", AgentType.TELEGRAF);
 
     verify(envoyRegistry).getEnvoyIdByResource("r-1");
     verify(envoyRegistry).containsEnvoyResource("r-1");
@@ -158,7 +162,7 @@ public class AgentInstallsListenerTest {
 
     verify(monitorBindingService).processEnvoy("e-1", Map.of(AgentType.TELEGRAF, "VERSION"));
 
-    verifyNoMoreInteractions(envoyRegistry, agentInstallApi, monitorBindingService);
+    verifyNoMoreInteractions(envoyRegistry, boundAgentInstallRepository, monitorBindingService);
   }
 
   @Test
@@ -181,6 +185,6 @@ public class AgentInstallsListenerTest {
 
     verify(envoyRegistry).containsEnvoyResource("r-1");
 
-    verifyNoMoreInteractions(envoyRegistry, agentInstallApi, monitorBindingService);
+    verifyNoMoreInteractions(envoyRegistry, boundAgentInstallRepository, monitorBindingService);
   }
 }
