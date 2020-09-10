@@ -16,10 +16,10 @@
 
 package com.rackspace.salus.telemetry.ambassador.services;
 
-import com.rackspace.salus.acm.web.model.AgentReleaseDTO;
-import com.rackspace.salus.acm.web.model.BoundAgentInstallDTO;
 import com.rackspace.salus.common.messaging.KafkaTopicProperties;
 import com.rackspace.salus.services.TelemetryEdge;
+import com.rackspace.salus.telemetry.entities.AgentRelease;
+import com.rackspace.salus.telemetry.entities.BoundAgentInstall;
 import com.rackspace.salus.telemetry.messaging.AgentInstallChangeEvent;
 import com.rackspace.salus.telemetry.messaging.OperationType;
 import com.rackspace.salus.telemetry.model.AgentType;
@@ -109,15 +109,16 @@ public class AgentInstallsListener implements ConsumerSeekAware {
 
   private void processAgentInstallUpdate(AgentInstallChangeEvent event) {
 
-    final BoundAgentInstallDTO binding = new BoundAgentInstallDTO(
-        boundAgentInstallRepository.findAllByTenantResourceAgentType(event.getTenantId(),
+    final BoundAgentInstall binding = boundAgentInstallRepository
+        .findAllByTenantResourceAgentType(event.getTenantId(),
             event.getResourceId(), event.getAgentType())
-            .stream().findFirst()
-            .orElseThrow(() -> new NotFoundException("Could find find agent install for given resource and agent type")));
+        .stream().findFirst()
+        .orElseThrow(
+            () -> new NotFoundException("Could find find agent for given resource and agent type"));
 
     log.debug("Retrieved agentInstallBinding={} for processing event={}", binding, event);
 
-    final AgentReleaseDTO agentRelease = binding.getAgentInstall().getAgentRelease();
+    final AgentRelease agentRelease = binding.getAgentInstall().getAgentRelease();
 
     final AgentType agentType = agentRelease.getType();
     final String agentVersion = agentRelease.getVersion();
