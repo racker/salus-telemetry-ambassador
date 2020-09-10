@@ -205,6 +205,11 @@
             <version>7.2.1.RELEASE</version>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>mysql</groupId>
+            <artifactId>mysql-connector-java</artifactId>
+            <scope>runtime</scope>
+        </dependency>
 
     </dependencies>
 

@@ -68,13 +68,4 @@ public class RestClientsConfig {
             .build()
     );
   }
-
-//  @Bean
-//  public AgentInstallApi agentInstallApi(RestTemplateBuilder restTemplateBuilder) {
-//    return new AgentInstallApiClient(
-//        restTemplateBuilder
-//            .rootUri(servicesProperties.getAgentCatalogManagementUrl())
-//            .build()
-//    );
-//  }
 }

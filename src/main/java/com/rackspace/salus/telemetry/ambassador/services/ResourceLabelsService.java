@@ -176,9 +176,8 @@ public class ResourceLabelsService implements ConsumerSeekAware {
                               ConsumerSeekCallback callback) { }
 
   public ResourceDTO findResourceByTenantIdAndResourceId(String tenantId, String resourceId) {
-    Resource resource = resourceRepository.findByTenantIdAndResourceId(tenantId, resourceId)
+    return resourceRepository.findByTenantIdAndResourceId(tenantId, resourceId)
+        .map(resource -> new ResourceDTO(resource, null))
         .orElse(null);
-
-    return resource == null ? null : new ResourceDTO(resource, null);
   }
 }
