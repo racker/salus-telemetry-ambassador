@@ -114,7 +114,7 @@ public class AgentInstallsListener implements ConsumerSeekAware {
             event.getResourceId(), event.getAgentType())
         .stream().findFirst()
         .orElseThrow(
-            () -> new NotFoundException("Could find find agent for given resource and agent type"));
+            () -> new NotFoundException("Could not find agent for given resource and agent type"));
 
     log.debug("Retrieved agentInstallBinding={} for processing event={}", binding, event);
 
