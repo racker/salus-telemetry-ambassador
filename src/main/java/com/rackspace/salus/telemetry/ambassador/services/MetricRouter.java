@@ -102,14 +102,14 @@ public class MetricRouter {
             tenantId = taggedTargetTenant;
         }
 
-        Map<String, String> resourceLables = resourceLabelsService.getResourceLabels(tenantId, resourceId);
-        if (resourceLables == null) {
+        Map<String, String> resourceLabels = resourceLabelsService.getResourceLabels(tenantId, resourceId);
+        if (resourceLabels == null) {
             log.warn(
-                "No resource lables are being tracked for tenant={} resource={}",
+                "No resource labels are being tracked for tenant={} resource={}",
                 tenantId, resourceId
             );
             missingResourceLabelTracking.increment();
-            resourceLables = Collections.emptyMap();
+            resourceLabels = Collections.emptyMap();
         }
 
         List<Metric> metrics = nameTagValue.getIvaluesMap().entrySet().stream()
@@ -141,7 +141,7 @@ public class MetricRouter {
             .setAccountType(UniversalMetricFrame.AccountType.MANAGED_HOSTING)
             .setTenantId(tenantId)
             .setDevice(resourceId)
-            .putAllDeviceMetadata(resourceLables)
+            .putAllDeviceMetadata(resourceLabels)
             .putAllSystemMetadata(Collections.singletonMap("envoy_id", envoyId))
             .setMonitoringSystem(UniversalMetricFrame.MonitoringSystem.SALUS)
             .addAllMetrics(metrics)
