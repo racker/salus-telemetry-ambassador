@@ -102,14 +102,14 @@ public class MetricRouter {
             tenantId = taggedTargetTenant;
         }
 
-        Map<String, String> labels = resourceLabelsService.getResourceLabels(tenantId, resourceId);
-        if (labels == null) {
+        Map<String, String> resourceLables = resourceLabelsService.getResourceLabels(tenantId, resourceId);
+        if (resourceLables == null) {
             log.warn(
-                "No resource labels are being tracked for tenant={} resource={}",
+                "No resource lables are being tracked for tenant={} resource={}",
                 tenantId, resourceId
             );
             missingResourceLabelTracking.increment();
-            labels = Collections.emptyMap();
+            resourceLables = Collections.emptyMap();
         }
 
         List<Metric> metrics = nameTagValue.getIvaluesMap().entrySet().stream()
@@ -141,8 +141,7 @@ public class MetricRouter {
             .setAccountType(UniversalMetricFrame.AccountType.MANAGED_HOSTING)
             .setTenantId(tenantId)
             .setDevice(resourceId)
-            .setDeviceName(nameTagValue.getName())
-            .putAllDeviceMetadata(labels)
+            .putAllDeviceMetadata(resourceLables)
             .putAllSystemMetadata(Collections.singletonMap("envoy_id", envoyId))
             .setMonitoringSystem(UniversalMetricFrame.MonitoringSystem.SALUS)
             .addAllMetrics(metrics)
@@ -154,10 +153,10 @@ public class MetricRouter {
             kafkaEgress.send(Strings.join(List.of(tenantId, resourceId, measurementName), ','),
                 KafkaMessageType.METRIC, JsonFormat.printer().print(universalMetricFrame));
 
-        } catch (IOException | NullPointerException e) {
-            log.warn("Failed to Avro encode avroMetric={} original={}", universalMetricFrame,
+        } catch (IOException e) {
+            log.warn("Failed to encode metricFrame={} from={}", universalMetricFrame,
                 postedMetric, e);
-            throw new RuntimeException("Failed to Avro encode metric", e);
+            throw new RuntimeException("Failed to encode metric", e);
         }
     }
 

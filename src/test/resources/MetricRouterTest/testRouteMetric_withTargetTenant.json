@@ -2,7 +2,6 @@
   "tenantId": "t-some-other",
   "accountType": "MANAGED_HOSTING",
   "device": "r-other",
-  "deviceName": "cpu",
   "deviceMetadata": {
     "hostname": "host1",
     "os": "linux"
