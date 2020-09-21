@@ -16,28 +16,25 @@
 
 package com.rackspace.salus.telemetry.ambassador.services;
 
-import com.rackspace.monplat.protocol.AccountType;
-import com.rackspace.monplat.protocol.ExternalMetric;
-import com.rackspace.monplat.protocol.MonitoringSystem;
+import com.google.protobuf.Timestamp;
+import com.google.protobuf.util.JsonFormat;
+import com.rackspace.monplat.protocol.Metric;
+import com.rackspace.monplat.protocol.UniversalMetricFrame;
 import com.rackspace.salus.services.TelemetryEdge;
 import com.rackspace.salus.services.TelemetryEdge.PostedMetric;
 import com.rackspace.salus.telemetry.messaging.KafkaMessageType;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.format.DateTimeFormatter;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.avro.Schema;
 import org.apache.avro.io.EncoderFactory;
-import org.apache.avro.io.JsonEncoder;
-import org.apache.avro.specific.SpecificDatumWriter;
 import org.apache.logging.log4j.util.Strings;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -105,48 +102,66 @@ public class MetricRouter {
             tenantId = taggedTargetTenant;
         }
 
-        Map<String, String> labels = resourceLabelsService.getResourceLabels(tenantId, resourceId);
-        if (labels == null) {
+        Map<String, String> resourceLabels = resourceLabelsService.getResourceLabels(tenantId, resourceId);
+        if (resourceLabels == null) {
             log.warn(
                 "No resource labels are being tracked for tenant={} resource={}",
                 tenantId, resourceId
             );
             missingResourceLabelTracking.increment();
-            labels = Collections.emptyMap();
+            resourceLabels = Collections.emptyMap();
         }
 
-        final ExternalMetric externalMetric = ExternalMetric.newBuilder()
-            .setAccountType(AccountType.RCN)
-            .setAccount(tenantId)
-            .setTimestamp(universalTimestampFormatter.format(timestamp))
+        List<Metric> metrics = nameTagValue.getIvaluesMap().entrySet().stream()
+            .map(entry -> Metric.newBuilder()
+                .setGroup(measurementName)
+                .setTimestamp(getProtoBufTimestamp(timestamp))
+                .setName(entry.getKey())
+                .setInt(entry.getValue())
+                .putAllMetadata(tagsMap)
+                .build()).collect(Collectors.toList());
+        metrics.addAll(nameTagValue.getFvaluesMap().entrySet().stream()
+            .map(entry -> Metric.newBuilder()
+                .setGroup(measurementName)
+                .setTimestamp(getProtoBufTimestamp(timestamp))
+                .setName(entry.getKey())
+                .setFloat(entry.getValue())
+                .putAllMetadata(tagsMap)
+                .build()).collect(Collectors.toList()));
+        metrics.addAll(nameTagValue.getSvaluesMap().entrySet().stream()
+            .map(entry -> Metric.newBuilder()
+                .setGroup(measurementName)
+                .setTimestamp(getProtoBufTimestamp(timestamp))
+                .setName(entry.getKey())
+                .setString(entry.getValue())
+                .putAllMetadata(tagsMap)
+                .build()).collect(Collectors.toList()));
+
+        final UniversalMetricFrame universalMetricFrame = UniversalMetricFrame.newBuilder()
+            .setAccountType(UniversalMetricFrame.AccountType.MANAGED_HOSTING)
+            .setTenantId(tenantId)
             .setDevice(resourceId)
-            .setDeviceMetadata(labels)
-            .setMonitoringSystem(MonitoringSystem.SALUS)
-            .setSystemMetadata(Collections.singletonMap("envoy_id", envoyId))
-            .setCollectionMetadata(tagsMap)
-            .setCollectionName(measurementName)
-            .setFvalues(nameTagValue.getFvaluesMap())
-            .setSvalues(nameTagValue.getSvaluesMap())
-            .setIvalues(Collections.emptyMap())
-            .setUnits(Collections.emptyMap())
+            .putAllDeviceMetadata(resourceLabels)
+            .putAllSystemMetadata(Collections.singletonMap("envoy_id", envoyId))
+            .setMonitoringSystem(UniversalMetricFrame.MonitoringSystem.SALUS)
+            .addAllMetrics(metrics)
             .build();
 
-        final ByteArrayOutputStream out = new ByteArrayOutputStream();
         try {
-            final Schema schema = externalMetric.getSchema();
-            final JsonEncoder jsonEncoder = avroEncoderFactory.jsonEncoder(schema, out);
-
-            final SpecificDatumWriter<Object> datumWriter = new SpecificDatumWriter<>(schema);
-            datumWriter.write(externalMetric, jsonEncoder);
-            jsonEncoder.flush();
 
             metricsRouted.increment();
             kafkaEgress.send(Strings.join(List.of(tenantId, resourceId, measurementName), ','),
-                KafkaMessageType.METRIC, out.toString(StandardCharsets.UTF_8.name()));
+                KafkaMessageType.METRIC, JsonFormat.printer().print(universalMetricFrame));
 
-        } catch (IOException|NullPointerException e) {
-            log.warn("Failed to Avro encode avroMetric={} original={}", externalMetric, postedMetric, e);
-            throw new RuntimeException("Failed to Avro encode metric", e);
+        } catch (IOException e) {
+            log.warn("Failed to encode metricFrame={} from={}", universalMetricFrame,
+                postedMetric, e);
+            throw new RuntimeException("Failed to encode metric", e);
         }
+    }
+
+    private Timestamp getProtoBufTimestamp(Instant timestamp) {
+        return Timestamp.newBuilder().setSeconds(timestamp.getEpochSecond())
+            .setNanos(timestamp.getNano()).build();
     }
 }
