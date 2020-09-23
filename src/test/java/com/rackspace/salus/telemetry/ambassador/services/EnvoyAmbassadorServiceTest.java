@@ -33,6 +33,7 @@ import com.rackspace.salus.services.TelemetryEdge.Metric;
 import com.rackspace.salus.services.TelemetryEdge.NameTagValueMetric;
 import com.rackspace.salus.services.TelemetryEdge.PostTestMonitorResultsResponse;
 import com.rackspace.salus.services.TelemetryEdge.TestMonitorResults;
+import com.rackspace.salus.telemetry.repositories.AgentHistoryRepository;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.StatusException;
@@ -86,6 +87,9 @@ public class EnvoyAmbassadorServiceTest {
 
   @MockBean
   TestMonitorResultsProducer testMonitorResultsProducer;
+
+  @MockBean
+  AgentHistoryRepository agentHistoryRepository;
 
   @Test
   public void testAttach_success() throws StatusException {

@@ -27,6 +27,8 @@ import com.rackspace.salus.services.TelemetryEdge.PostMetricResponse;
 import com.rackspace.salus.services.TelemetryEdge.PostTestMonitorResultsResponse;
 import com.rackspace.salus.services.TelemetryEdge.PostedMetric;
 import com.rackspace.salus.services.TelemetryEdge.TestMonitorResults;
+import com.rackspace.salus.telemetry.entities.AgentHistory;
+import com.rackspace.salus.telemetry.repositories.AgentHistoryRepository;
 import io.grpc.Status;
 import io.grpc.StatusException;
 import io.grpc.stub.ServerCallStreamObserver;
@@ -37,6 +39,7 @@ import io.micrometer.core.instrument.Timer;
 import java.net.SocketAddress;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
 import org.lognet.springboot.grpc.GRpcService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -48,6 +51,7 @@ public class EnvoyAmbassadorService extends TelemetryAmbassadorImplBase {
     private final LogEventRouter logEventRouter;
     private final MetricRouter metricRouter;
     private final TestMonitorResultsProducer testMonitorResultsProducer;
+    private final AgentHistoryRepository agentHistoryRepository;
 
     // metrics counters
     private final Counter envoyAttach;
@@ -63,11 +67,12 @@ public class EnvoyAmbassadorService extends TelemetryAmbassadorImplBase {
                                   LogEventRouter logEventRouter,
                                   MetricRouter metricRouter,
                                   TestMonitorResultsProducer testMonitorResultsProducer,
-                                  MeterRegistry meterRegistry) {
+                                  MeterRegistry meterRegistry, AgentHistoryRepository agentHistoryRepository) {
         this.envoyRegistry = envoyRegistry;
         this.logEventRouter = logEventRouter;
         this.metricRouter = metricRouter;
         this.testMonitorResultsProducer = testMonitorResultsProducer;
+        this.agentHistoryRepository = agentHistoryRepository;
 
         envoyAttach = meterRegistry.counter("messages","operation", "attach");
         attachDuration = meterRegistry.timer("attachDuration");
@@ -83,8 +88,18 @@ public class EnvoyAmbassadorService extends TelemetryAmbassadorImplBase {
         final String envoyId = GrpcContextDetails.getCallerEnvoyId();
         final String tenantId = GrpcContextDetails.getCallerTenantId();
         final String resourceId = request.getResourceId();
+        final String zoneID = request.getZone();
 
         final Instant attachStartTime = Instant.now();
+
+        AgentHistory agentHistory = new AgentHistory()
+            .setConnectedAt(attachStartTime)
+            .setEnvoyID(envoyId)
+            .setResourceID(resourceId)
+            .setTenantID(tenantId)
+            .setZoneID(zoneID)
+            .setRemoteIP(remoteAddr.toString())
+            .setId(UUID.randomUUID());
 
         registerCancelHandler(tenantId, resourceId, envoyId, remoteAddr, responseObserver);
         envoyAttach.increment();
@@ -97,6 +112,8 @@ public class EnvoyAmbassadorService extends TelemetryAmbassadorImplBase {
                     return o;
                 })
                 .join();
+            agentHistoryRepository.save(agentHistory);
+            log.info("agentHistory saved with initial values");
         } catch (StatusException e) {
             responseObserver.onError(e);
         } catch (Exception e) {

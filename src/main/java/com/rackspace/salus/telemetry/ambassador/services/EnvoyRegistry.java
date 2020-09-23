@@ -31,6 +31,7 @@ import com.rackspace.salus.services.TelemetryEdge.EnvoySummary;
 import com.rackspace.salus.telemetry.ambassador.config.AmbassadorProperties;
 import com.rackspace.salus.telemetry.ambassador.types.ResourceKey;
 import com.rackspace.salus.telemetry.ambassador.types.ZoneNotAuthorizedException;
+import com.rackspace.salus.telemetry.entities.AgentHistory;
 import com.rackspace.salus.telemetry.etcd.services.EnvoyLeaseTracking;
 import com.rackspace.salus.telemetry.etcd.services.EnvoyResourceManagement;
 import com.rackspace.salus.telemetry.etcd.services.ZoneStorage;
@@ -39,6 +40,7 @@ import com.rackspace.salus.telemetry.messaging.AttachEvent;
 import com.rackspace.salus.telemetry.messaging.OperationType;
 import com.rackspace.salus.telemetry.model.AgentType;
 import com.rackspace.salus.telemetry.model.LabelNamespaces;
+import com.rackspace.salus.telemetry.repositories.AgentHistoryRepository;
 import io.grpc.Status;
 import io.grpc.StatusException;
 import io.grpc.StatusRuntimeException;
@@ -48,6 +50,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -86,6 +89,7 @@ public class EnvoyRegistry {
   private final Counter missingInstanceDuringRemove;
   private ConcurrentHashMap<String, EnvoyEntry> envoys = new ConcurrentHashMap<>();
   private ConcurrentHashMap<String, EnvoyEntry> envoysByResourceId = new ConcurrentHashMap<>();
+  private final AgentHistoryRepository agentHistoryRepository;
 
   static final String BAD_RESOURCE_ID_VALIDATION_MESSAGE =
       "resourceId may only contain alphanumeric's, '.', ':', or '-'";
@@ -100,7 +104,8 @@ public class EnvoyRegistry {
       ResourceLabelsService resourceLabelsService,
       ZoneAuthorizer zoneAuthorizer,
       ZoneStorage zoneStorage,
-      MeterRegistry meterRegistry) {
+      MeterRegistry meterRegistry,
+      AgentHistoryRepository agentHistoryRepository) {
     this.appProperties = appProperties;
     this.eventProducer = eventProducer;
     this.envoyLeaseTracking = envoyLeaseTracking;
@@ -109,6 +114,7 @@ public class EnvoyRegistry {
     this.zoneAuthorizer = zoneAuthorizer;
     this.zoneStorage = zoneStorage;
     this.boundMonitorHashFunction = Hashing.adler32();
+    this.agentHistoryRepository = agentHistoryRepository;
 
     unauthorizedZoneCounter = meterRegistry.counter("attachErrors", "type", "unauthorizedZone");
     instructionsSentSuccessful = meterRegistry.counter("instructionsSent", "status", "success");
@@ -331,8 +337,21 @@ public class EnvoyRegistry {
       log.warn("Unable to locate envoy entry for instance={}", instanceId);
       missingInstanceDuringRemove.increment();
     }
+    addEnvoyConnectionClosedTime(instanceId);
     envoyLeaseTracking.revoke(instanceId);
   }
+
+  public void addEnvoyConnectionClosedTime(String envoyId)  {
+    List<AgentHistory> agents = agentHistoryRepository.findAllByEnvoyIdAAndConnectedClosedAtNull(envoyId);
+    if(!agents.isEmpty()) {
+      AgentHistory agentHistory = agents.get(0);
+      final Instant connectionClosedTime = Instant.now();
+      agentHistory.setConnectedClosedAt(connectionClosedTime);
+      agentHistoryRepository.save(agentHistory);
+      log.info("agentHistory updated with connection closed time");
+    }
+  }
+
 
   private void processFailedSend(String instanceId, Exception e) {
     log.info("Removing envoy stream for id={} due to exception={}",
