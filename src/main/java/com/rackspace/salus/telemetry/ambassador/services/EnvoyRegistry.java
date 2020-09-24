@@ -341,17 +341,15 @@ public class EnvoyRegistry {
     envoyLeaseTracking.revoke(instanceId);
   }
 
-  public void addEnvoyConnectionClosedTime(String envoyId)  {
-    List<AgentHistory> agents = agentHistoryRepository.findAllByEnvoyIdAAndConnectedClosedAtNull(envoyId);
+  private void addEnvoyConnectionClosedTime(String envoyId)  {
+    List<AgentHistory> agents = agentHistoryRepository.findAllByEnvoyIdAndDisconnectedAtIsNull(envoyId);
     if(!agents.isEmpty()) {
       AgentHistory agentHistory = agents.get(0);
       final Instant connectionClosedTime = Instant.now();
-      agentHistory.setConnectedClosedAt(connectionClosedTime);
+      agentHistory.setDisconnectedAt(connectionClosedTime);
       agentHistoryRepository.save(agentHistory);
-      log.info("agentHistory updated with connection closed time");
     }
   }
-
 
   private void processFailedSend(String instanceId, Exception e) {
     log.info("Removing envoy stream for id={} due to exception={}",

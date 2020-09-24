@@ -94,11 +94,11 @@ public class EnvoyAmbassadorService extends TelemetryAmbassadorImplBase {
 
         AgentHistory agentHistory = new AgentHistory()
             .setConnectedAt(attachStartTime)
-            .setEnvoyID(envoyId)
-            .setResourceID(resourceId)
-            .setTenantID(tenantId)
-            .setZoneID(zoneID)
-            .setRemoteIP(remoteAddr.toString())
+            .setEnvoyId(envoyId)
+            .setResourceId(resourceId)
+            .setTenantId(tenantId)
+            .setZoneId(zoneID)
+            .setRemoteIp(remoteAddr.toString())
             .setId(UUID.randomUUID());
 
         registerCancelHandler(tenantId, resourceId, envoyId, remoteAddr, responseObserver);
@@ -113,7 +113,6 @@ public class EnvoyAmbassadorService extends TelemetryAmbassadorImplBase {
                 })
                 .join();
             agentHistoryRepository.save(agentHistory);
-            log.info("agentHistory saved with initial values");
         } catch (StatusException e) {
             responseObserver.onError(e);
         } catch (Exception e) {
