@@ -31,7 +31,6 @@ import com.rackspace.salus.services.TelemetryEdge.EnvoySummary;
 import com.rackspace.salus.telemetry.ambassador.config.AmbassadorProperties;
 import com.rackspace.salus.telemetry.ambassador.types.ResourceKey;
 import com.rackspace.salus.telemetry.ambassador.types.ZoneNotAuthorizedException;
-import com.rackspace.salus.telemetry.entities.AgentHistory;
 import com.rackspace.salus.telemetry.etcd.services.EnvoyLeaseTracking;
 import com.rackspace.salus.telemetry.etcd.services.EnvoyResourceManagement;
 import com.rackspace.salus.telemetry.etcd.services.ZoneStorage;
@@ -50,7 +49,6 @@ import io.micrometer.core.instrument.MeterRegistry;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.nio.charset.StandardCharsets;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -337,18 +335,7 @@ public class EnvoyRegistry {
       log.warn("Unable to locate envoy entry for instance={}", instanceId);
       missingInstanceDuringRemove.increment();
     }
-    addEnvoyConnectionClosedTime(instanceId);
     envoyLeaseTracking.revoke(instanceId);
-  }
-
-  private void addEnvoyConnectionClosedTime(String envoyId)  {
-    List<AgentHistory> agents = agentHistoryRepository.findAllByEnvoyIdAndDisconnectedAtIsNull(envoyId);
-    if(!agents.isEmpty()) {
-      AgentHistory agentHistory = agents.get(0);
-      final Instant connectionClosedTime = Instant.now();
-      agentHistory.setDisconnectedAt(connectionClosedTime);
-      agentHistoryRepository.save(agentHistory);
-    }
   }
 
   private void processFailedSend(String instanceId, Exception e) {
