@@ -26,6 +26,10 @@ public class AgentHistoryConversionService {
   public AgentHistoryOutput convertToOutput(AgentHistory agentHistory)  {
     AgentHistoryOutput agentHistoryOutput = new AgentHistoryOutput();
     BeanUtils.copyProperties(agentHistory, agentHistoryOutput);
+    agentHistoryOutput.setConnectedAt(agentHistory.getConnectedAt().toString());
+    if(agentHistory.getDisconnectedAt() != null) {
+      agentHistoryOutput.setDisconnectedAt(agentHistory.getDisconnectedAt().toString());
+    }
     return agentHistoryOutput;
   }
 }
