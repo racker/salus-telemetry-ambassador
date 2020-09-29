@@ -19,6 +19,8 @@ package com.rackspace.salus.telemetry.ambassador.web.controller;
 import static org.hamcrest.CoreMatchers.is;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
@@ -34,8 +36,6 @@ import com.rackspace.salus.telemetry.model.PagedContent;
 import com.rackspace.salus.telemetry.repositories.AgentHistoryRepository;
 import java.util.List;
 import java.util.Optional;
-import java.util.UUID;
-import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -44,6 +44,8 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.junit4.SpringRunner;
@@ -73,20 +75,19 @@ public class AgentHistoryControllerTest {
   @Test
   public void testGetAgentHistoryForTenant_by_envoyId() throws Exception {
     AgentHistory agentHistory = podamFactory.manufacturePojo(AgentHistory.class);
-    agentHistory.setId(UUID.randomUUID());
     when(agentHistoryService.getAgentHistoryForTenantAndEnvoyId(anyString(), anyString()))
         .thenReturn(Optional.of(agentHistory));
 
-    String tenantId = RandomStringUtils.randomAlphabetic(8);
-    String envoyId = RandomStringUtils.randomAlphabetic(8);
-    String url = String.format("/api/tenant/%s/agent-history", tenantId);
+    String url = String.format("/api/tenant/%s/agent-history", agentHistory.getTenantId());
 
-    mockMvc.perform(get(url).param("envoyId",envoyId).contentType(MediaType.APPLICATION_JSON))
+    mockMvc.perform(get(url).param("envoyId",agentHistory.getEnvoyId()).contentType(MediaType.APPLICATION_JSON))
         .andExpect(status().isOk())
         .andDo(print())
         .andExpect(content()
             .contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
         .andExpect(jsonPath("$.content[0].id", is(agentHistory.getId().toString())));
+    verify(agentHistoryService).getAgentHistoryForTenantAndEnvoyId(
+        agentHistory.getTenantId(), agentHistory.getEnvoyId());
   }
 
   @Test
@@ -97,6 +98,7 @@ public class AgentHistoryControllerTest {
     int pageSize = 20;
     AgentHistory agentHistory = podamFactory.manufacturePojo(AgentHistory.class);
     List<AgentHistory> listOfAgentHistory = List.of(agentHistory);
+    Pageable pageable = PageRequest.of(0, 20, Sort.unsorted());
 
     int start = page * pageSize;
     Page<AgentHistory> pageOfAgentHistory = new PageImpl<>(listOfAgentHistory.subList(start, numberOfAgentHistory),
@@ -108,17 +110,17 @@ public class AgentHistoryControllerTest {
     when(agentHistoryService.getAgentHistoryForTenantAndResource(anyString(), anyString(), any()))
         .thenReturn(pageOfAgentHistory);
 
-    String tenantId = RandomStringUtils.randomAlphabetic(8);
-    String resourceId = RandomStringUtils.randomAlphabetic(8);
-    String url = String.format("/api/tenant/%s/agent-history", tenantId);
+    String url = String.format("/api/tenant/%s/agent-history", agentHistory.getTenantId());
 
-    mockMvc.perform(get(url).param("resourceId",resourceId).contentType(MediaType.APPLICATION_JSON))
+    mockMvc.perform(get(url).param("resourceId",agentHistory.getResourceId()).contentType(MediaType.APPLICATION_JSON))
         .andExpect(status().isOk())
         .andDo(print())
         .andExpect(content()
             .contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
         .andExpect(content().string(objectMapper.writeValueAsString(result.map(AgentHistoryDTO::new))))
         .andExpect(jsonPath("$.content[0].id", is(agentHistory.getId().toString())));
+    verify(agentHistoryService).getAgentHistoryForTenantAndResource(
+        agentHistory.getTenantId(), agentHistory.getResourceId(), pageable);
   }
 
   @Test
@@ -129,6 +131,7 @@ public class AgentHistoryControllerTest {
     int pageSize = 20;
     AgentHistory agentHistory = podamFactory.manufacturePojo(AgentHistory.class);
     List<AgentHistory> listOfAgentHistory = List.of(agentHistory);
+    Pageable pageable = PageRequest.of(0, 20, Sort.unsorted());
 
     int start = page * pageSize;
     Page<AgentHistory> pageOfAgentHistory = new PageImpl<>(listOfAgentHistory.subList(start, numberOfAgentHistory),
@@ -140,8 +143,7 @@ public class AgentHistoryControllerTest {
     when(agentHistoryService.getAgentHistoryForTenant(anyString(), any()))
         .thenReturn(pageOfAgentHistory);
 
-    String tenantId = RandomStringUtils.randomAlphabetic(8);
-    String url = String.format("/api/tenant/%s/agent-history", tenantId);
+    String url = String.format("/api/tenant/%s/agent-history", agentHistory.getTenantId());
 
     mockMvc.perform(get(url).contentType(MediaType.APPLICATION_JSON))
         .andExpect(status().isOk())
@@ -150,21 +152,21 @@ public class AgentHistoryControllerTest {
             .contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
         .andExpect(content().string(objectMapper.writeValueAsString(result.map(AgentHistoryDTO::new))))
         .andExpect(jsonPath("$.content[0].id", is(agentHistory.getId().toString())));
+    verify(agentHistoryService).getAgentHistoryForTenant(
+        agentHistory.getTenantId(), pageable);
   }
 
   @Test
   public void testGetAgentHistoryForTenant_by_resourceId_and_envoyId() throws Exception {
     AgentHistory agentHistory = podamFactory.manufacturePojo(AgentHistory.class);
-    when(agentHistoryService.getAgentHistoryForTenantAndEnvoyId(anyString(), anyString()))
-        .thenReturn(Optional.of(agentHistory));
+    String url = String.format("/api/tenant/%s/agent-history", agentHistory.getTenantId());
 
-    String tenantId = RandomStringUtils.randomAlphabetic(8);
-    String resourceId = RandomStringUtils.randomAlphabetic(8);
-    String envoyId = RandomStringUtils.randomAlphabetic(8);
-    String url = String.format("/api/tenant/%s/agent-history", tenantId);
-
-    mockMvc.perform(get(url).param("envoyId", envoyId).param("resourceId", resourceId).contentType(MediaType.APPLICATION_JSON))
+    mockMvc.perform(get(url)
+        .param("envoyId", agentHistory.getEnvoyId())
+        .param("resourceId", agentHistory.getResourceId())
+        .contentType(MediaType.APPLICATION_JSON))
         .andExpect(status().isBadRequest())
         .andDo(print());
+    verifyNoMoreInteractions(agentHistoryService);
   }
 }

@@ -16,9 +16,12 @@
 
 package com.rackspace.salus.telemetry.ambassador.services;
 
+import com.rackspace.salus.common.config.MetricTags;
 import com.rackspace.salus.services.TelemetryEdge.EnvoySummary;
 import com.rackspace.salus.telemetry.entities.AgentHistory;
 import com.rackspace.salus.telemetry.repositories.AgentHistoryRepository;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.net.SocketAddress;
 import java.time.Instant;
 import java.util.Optional;
@@ -31,10 +34,17 @@ import org.springframework.stereotype.Service;
 @Service
 public class AgentHistoryService {
 
+  MeterRegistry meterRegistry;
+
+  // metrics counters
+  private final Counter.Builder agentHistoryError;
   private final AgentHistoryRepository agentHistoryRepository;
 
-  public AgentHistoryService(AgentHistoryRepository agentHistoryRepository)  {
+  public AgentHistoryService(AgentHistoryRepository agentHistoryRepository,
+      MeterRegistry meterRegistry)  {
     this.agentHistoryRepository = agentHistoryRepository;
+    this.meterRegistry = meterRegistry;
+    agentHistoryError = Counter.builder("agent-history-save-failed").tag(MetricTags.SERVICE_METRIC_TAG,"AgentHistoryService");
   }
 
   public Optional<AgentHistory> getAgentHistoryForTenantAndEnvoyId(String tenantId, String envoyId) {
@@ -49,10 +59,9 @@ public class AgentHistoryService {
     return agentHistoryRepository.findByTenantId(tenantId, pageable);
   }
 
-  public void addAgentHistory(EnvoySummary request, Instant attachStartTime) {
-    final SocketAddress remoteAddr = GrpcContextDetails.getCallerRemoteAddress();
-    final String envoyId = GrpcContextDetails.getCallerEnvoyId();
-    final String tenantId = GrpcContextDetails.getCallerTenantId();
+  public AgentHistory addAgentHistory(EnvoySummary request,
+      SocketAddress remoteAddr, String envoyId, String tenantId,
+      Instant attachStartTime) {
     final String resourceId = request.getResourceId();
     final String zoneId = request.getZone();
 
@@ -63,7 +72,7 @@ public class AgentHistoryService {
         .setTenantId(tenantId)
         .setZoneId(zoneId)
         .setRemoteIp(remoteAddr.toString());
-    agentHistoryRepository.save(agentHistory);
+    return agentHistoryRepository.save(agentHistory);
   }
 
   public void addEnvoyConnectionClosedTime(String tenantId, String envoyId)  {
@@ -73,6 +82,10 @@ public class AgentHistoryService {
       final Instant connectionClosedTime = Instant.now();
       agentHistory.setDisconnectedAt(connectionClosedTime);
       agentHistoryRepository.save(agentHistory);
+    } else  {
+      log.warn("unable to find connection history with tenantId= {} and envoyId= {} ",tenantId, envoyId);
+      agentHistoryError.tags(MetricTags.OPERATION_METRIC_TAG, "addAgentHistory", MetricTags.EXCEPTION_METRIC_TAG,"error occurred while saving agent history")
+          .register(meterRegistry).increment();
     }
   }
 }

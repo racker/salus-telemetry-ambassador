@@ -86,7 +86,6 @@ public class EnvoyAmbassadorService extends TelemetryAmbassadorImplBase {
         final String envoyId = GrpcContextDetails.getCallerEnvoyId();
         final String tenantId = GrpcContextDetails.getCallerTenantId();
         final String resourceId = request.getResourceId();
-        final String zoneId = request.getZone();
 
         final Instant attachStartTime = Instant.now();
 
@@ -101,7 +100,7 @@ public class EnvoyAmbassadorService extends TelemetryAmbassadorImplBase {
                     return o;
                 })
                 .join();
-            agentHistoryService.addAgentHistory(request, attachStartTime);
+            agentHistoryService.addAgentHistory(request,remoteAddr, envoyId, tenantId, attachStartTime);
         } catch (StatusException e) {
             responseObserver.onError(e);
         } catch (Exception e) {

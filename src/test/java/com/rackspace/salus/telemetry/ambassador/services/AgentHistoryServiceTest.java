@@ -23,9 +23,13 @@ import static org.junit.Assert.assertTrue;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rackspace.salus.monitor_management.config.DatabaseConfig;
+import com.rackspace.salus.services.TelemetryEdge.EnvoySummary;
 import com.rackspace.salus.telemetry.entities.AgentHistory;
 import com.rackspace.salus.telemetry.repositories.AgentHistoryRepository;
 import com.rackspace.salus.test.EnableTestContainersDatabase;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import java.net.InetSocketAddress;
 import java.time.Instant;
 import java.util.Optional;
 import lombok.extern.slf4j.Slf4j;
@@ -33,6 +37,7 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.Mock;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.context.annotation.Import;
@@ -48,7 +53,8 @@ import uk.co.jemos.podam.api.PodamFactoryImpl;
 @EnableTestContainersDatabase
 @DataJpaTest(showSql = false)
 @Import({AgentHistoryService.class, DatabaseConfig.class,
-    ObjectMapper.class
+    ObjectMapper.class,
+    SimpleMeterRegistry.class
 })
 public class AgentHistoryServiceTest {
 
@@ -61,6 +67,9 @@ public class AgentHistoryServiceTest {
   private AgentHistory currentAgentHistory;
 
   private PodamFactory podamFactory = new PodamFactoryImpl();
+
+  @Mock
+  MeterRegistry meterRegistry;
 
   @Before
   public void setUp() {
@@ -86,12 +95,7 @@ public class AgentHistoryServiceTest {
   @Test
   public void testGetAgentHistoryForTenantAndEnvoyId()  {
     Optional<AgentHistory> agentHistoryOptional = agentHistoryService.getAgentHistoryForTenantAndEnvoyId("t-1","e-1");
-
-    assertTrue(agentHistoryOptional.isPresent());
-    assertThat(agentHistoryOptional.get().getId(), notNullValue());
-    assertThat(agentHistoryOptional.get().getRemoteIp(), equalTo("0.0.0.0"));
-    assertThat(agentHistoryOptional.get().getResourceId(), equalTo("r-1"));
-    assertThat(agentHistoryOptional.get().getZoneId(), equalTo("z-1"));
+    assertExpectedAgentHistory(agentHistoryOptional);
   }
 
   @Test
@@ -108,5 +112,29 @@ public class AgentHistoryServiceTest {
     Pageable page = PageRequest.of(0, pageSize);
     Page<AgentHistory> result = agentHistoryService.getAgentHistoryForTenant("t-1", page);
     assertThat(result.getTotalElements(), equalTo(1L));
+  }
+
+  private void assertExpectedAgentHistory(Optional<AgentHistory> agentHistoryOptional) {
+    assertTrue(agentHistoryOptional.isPresent());
+    assertThat(agentHistoryOptional.get().getId(), notNullValue());
+    assertThat(agentHistoryOptional.get().getRemoteIp(), equalTo("0.0.0.0"));
+    assertThat(agentHistoryOptional.get().getResourceId(), equalTo("r-1"));
+    assertThat(agentHistoryOptional.get().getZoneId(), equalTo("z-1"));
+  }
+
+  @Test
+  public void testAddAgentHistory() {
+    final InetSocketAddress remoteAddress = new InetSocketAddress("127.0.0.1", 33333);
+    EnvoySummary envoySummary = podamFactory.manufacturePojo(EnvoySummary.class);
+    Instant connectedAtInstant = Instant.now();
+    AgentHistory agentHistory = agentHistoryService.addAgentHistory(envoySummary, remoteAddress, "e-1", "t-1", connectedAtInstant);
+
+    assertThat(agentHistory.getEnvoyId(), equalTo("e-1"));
+    assertThat(agentHistory.getResourceId(), equalTo(envoySummary.getResourceId()));
+    assertThat(agentHistory.getTenantId(), equalTo("t-1"));
+    assertThat(agentHistory.getZoneId(), equalTo(envoySummary.getZone()));
+    assertThat(agentHistory.getRemoteIp(), equalTo(remoteAddress.toString()));
+    assertThat(agentHistory.getConnectedAt(), equalTo(connectedAtInstant));
+
   }
 }

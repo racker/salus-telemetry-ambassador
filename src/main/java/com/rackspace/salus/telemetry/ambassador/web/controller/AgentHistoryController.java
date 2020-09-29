@@ -52,13 +52,19 @@ public class AgentHistoryController {
     if(!StringUtils.isEmpty(envoyId) && !StringUtils.isEmpty(resourceId)) {
       throw new IllegalArgumentException("EnvoyId and ResourceId both cannot be not-null");
     } else if(!StringUtils.isEmpty(envoyId))  {
-      return PagedContent.ofSingleton(new AgentHistoryDTO(agentHistoryService.getAgentHistoryForTenantAndEnvoyId(tenantId, envoyId)
+      return PagedContent.ofSingleton(
+          new AgentHistoryDTO(agentHistoryService.getAgentHistoryForTenantAndEnvoyId(tenantId, envoyId)
           .orElseThrow(() ->
-              new NotFoundException(String.format("No Agent History found for tenant %s and envoy %s ", tenantId, envoyId)))));
+              new NotFoundException(
+                  String.format("No Agent History found for tenant %s and envoy %s ", tenantId, envoyId)))));
     } else if(!StringUtils.isEmpty(resourceId))  {
-      return PagedContent.fromPage(agentHistoryService.getAgentHistoryForTenantAndResource(tenantId, resourceId, pageable)).map(AgentHistoryDTO::new);
+      return PagedContent.fromPage(
+          agentHistoryService.getAgentHistoryForTenantAndResource(tenantId, resourceId, pageable))
+          .map(AgentHistoryDTO::new);
     } else  {
-      return PagedContent.fromPage(agentHistoryService.getAgentHistoryForTenant(tenantId, pageable)).map(AgentHistoryDTO::new);
+      return PagedContent.fromPage(
+          agentHistoryService.getAgentHistoryForTenant(tenantId, pageable))
+          .map(AgentHistoryDTO::new);
     }
   }
 }
