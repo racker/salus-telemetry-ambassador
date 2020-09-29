@@ -48,7 +48,6 @@ import com.rackspace.salus.telemetry.messaging.AttachEvent;
 import com.rackspace.salus.telemetry.messaging.OperationType;
 import com.rackspace.salus.telemetry.model.AgentType;
 import com.rackspace.salus.telemetry.model.ResourceInfo;
-import com.rackspace.salus.telemetry.repositories.AgentHistoryRepository;
 import io.grpc.StatusException;
 import io.grpc.stub.StreamObserver;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -110,9 +109,6 @@ public class EnvoyRegistryTest {
 
   @Autowired
   EnvoyRegistry envoyRegistry;
-
-  @MockBean
-  AgentHistoryRepository agentHistoryRepository;
 
   @SuppressWarnings("unchecked")
   @Test

@@ -39,7 +39,6 @@ import com.rackspace.salus.telemetry.messaging.AttachEvent;
 import com.rackspace.salus.telemetry.messaging.OperationType;
 import com.rackspace.salus.telemetry.model.AgentType;
 import com.rackspace.salus.telemetry.model.LabelNamespaces;
-import com.rackspace.salus.telemetry.repositories.AgentHistoryRepository;
 import io.grpc.Status;
 import io.grpc.StatusException;
 import io.grpc.StatusRuntimeException;
@@ -87,7 +86,6 @@ public class EnvoyRegistry {
   private final Counter missingInstanceDuringRemove;
   private ConcurrentHashMap<String, EnvoyEntry> envoys = new ConcurrentHashMap<>();
   private ConcurrentHashMap<String, EnvoyEntry> envoysByResourceId = new ConcurrentHashMap<>();
-  private final AgentHistoryRepository agentHistoryRepository;
 
   static final String BAD_RESOURCE_ID_VALIDATION_MESSAGE =
       "resourceId may only contain alphanumeric's, '.', ':', or '-'";
@@ -102,8 +100,7 @@ public class EnvoyRegistry {
       ResourceLabelsService resourceLabelsService,
       ZoneAuthorizer zoneAuthorizer,
       ZoneStorage zoneStorage,
-      MeterRegistry meterRegistry,
-      AgentHistoryRepository agentHistoryRepository) {
+      MeterRegistry meterRegistry) {
     this.appProperties = appProperties;
     this.eventProducer = eventProducer;
     this.envoyLeaseTracking = envoyLeaseTracking;
@@ -112,7 +109,6 @@ public class EnvoyRegistry {
     this.zoneAuthorizer = zoneAuthorizer;
     this.zoneStorage = zoneStorage;
     this.boundMonitorHashFunction = Hashing.adler32();
-    this.agentHistoryRepository = agentHistoryRepository;
 
     unauthorizedZoneCounter = meterRegistry.counter("attachErrors", "type", "unauthorizedZone");
     instructionsSentSuccessful = meterRegistry.counter("instructionsSent", "status", "success");

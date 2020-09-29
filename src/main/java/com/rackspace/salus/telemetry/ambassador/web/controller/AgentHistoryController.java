@@ -16,14 +16,13 @@
 
 package com.rackspace.salus.telemetry.ambassador.web.controller;
 
-import com.rackspace.salus.telemetry.ambassador.services.AgentHistoryConversionService;
 import com.rackspace.salus.telemetry.ambassador.services.AgentHistoryService;
-import com.rackspace.salus.telemetry.ambassador.web.model.AgentHistoryOutput;
-import com.rackspace.salus.telemetry.entities.AgentHistory;
+import com.rackspace.salus.telemetry.ambassador.web.model.AgentHistoryDTO;
 import com.rackspace.salus.telemetry.model.NotFoundException;
+import com.rackspace.salus.telemetry.model.PagedContent;
 import io.swagger.annotations.ApiOperation;
-import java.util.Optional;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Pageable;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -37,32 +36,29 @@ import org.springframework.web.bind.annotation.RestController;
 public class AgentHistoryController {
 
   private final AgentHistoryService agentHistoryService;
-  private final AgentHistoryConversionService agentHistoryConversionService;
 
-  public AgentHistoryController(AgentHistoryService agentHistoryService,
-      AgentHistoryConversionService agentHistoryConversionService)  {
+  public AgentHistoryController(AgentHistoryService agentHistoryService)  {
     this.agentHistoryService = agentHistoryService;
-    this.agentHistoryConversionService = agentHistoryConversionService;
   }
 
   @GetMapping("/tenant/{tenantId}/agent-history")
   @ApiOperation(value = "Gets Agent History for Tenant")
-  public AgentHistoryOutput getAgentHistoryForTenant(
+  public PagedContent<AgentHistoryDTO> getAgentHistoryForTenant(
       @PathVariable String tenantId,
       @RequestParam(name = "envoyId", required = false) String envoyId,
-      @RequestParam(name = "resourceId", required = false) String resourceId)
+      @RequestParam(name = "resourceId", required = false) String resourceId,
+      Pageable pageable)
       throws NotFoundException {
-    Optional<AgentHistory> agentHistoryOptional = Optional.empty();
-    if(!StringUtils.isEmpty(envoyId))  {
-      agentHistoryOptional = agentHistoryService.getAgentHistoryForTenant(tenantId, envoyId);
+    if(!StringUtils.isEmpty(envoyId) && !StringUtils.isEmpty(resourceId)) {
+      throw new IllegalArgumentException("EnvoyId and ResourceId both cannot be not-null");
+    } else if(!StringUtils.isEmpty(envoyId))  {
+      return PagedContent.ofSingleton(new AgentHistoryDTO(agentHistoryService.getAgentHistoryForTenantAndEnvoyId(tenantId, envoyId)
+          .orElseThrow(() ->
+              new NotFoundException(String.format("No Agent History found for tenant %s and envoy %s ", tenantId, envoyId)))));
+    } else if(!StringUtils.isEmpty(resourceId))  {
+      return PagedContent.fromPage(agentHistoryService.getAgentHistoryForTenantAndResource(tenantId, resourceId, pageable)).map(AgentHistoryDTO::new);
+    } else  {
+      return PagedContent.fromPage(agentHistoryService.getAgentHistoryForTenant(tenantId, pageable)).map(AgentHistoryDTO::new);
     }
-    if(!StringUtils.isEmpty(resourceId))  {
-      agentHistoryOptional = agentHistoryService.getAgentHistoryForResource(tenantId, resourceId);
-    }
-
-    AgentHistory agentHistory = agentHistoryOptional.orElseThrow(() ->
-        new NotFoundException(String.format("No Agent History found for tenant %s", tenantId)));
-
-    return agentHistoryConversionService.convertToOutput(agentHistory);
   }
 }

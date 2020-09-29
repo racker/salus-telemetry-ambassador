@@ -27,8 +27,6 @@ import com.rackspace.salus.services.TelemetryEdge.PostMetricResponse;
 import com.rackspace.salus.services.TelemetryEdge.PostTestMonitorResultsResponse;
 import com.rackspace.salus.services.TelemetryEdge.PostedMetric;
 import com.rackspace.salus.services.TelemetryEdge.TestMonitorResults;
-import com.rackspace.salus.telemetry.entities.AgentHistory;
-import com.rackspace.salus.telemetry.repositories.AgentHistoryRepository;
 import io.grpc.Status;
 import io.grpc.StatusException;
 import io.grpc.stub.ServerCallStreamObserver;
@@ -39,8 +37,6 @@ import io.micrometer.core.instrument.Timer;
 import java.net.SocketAddress;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Optional;
-import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
 import org.lognet.springboot.grpc.GRpcService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -52,7 +48,7 @@ public class EnvoyAmbassadorService extends TelemetryAmbassadorImplBase {
     private final LogEventRouter logEventRouter;
     private final MetricRouter metricRouter;
     private final TestMonitorResultsProducer testMonitorResultsProducer;
-    private final AgentHistoryRepository agentHistoryRepository;
+    private final AgentHistoryService agentHistoryService;
 
     // metrics counters
     private final Counter envoyAttach;
@@ -68,12 +64,13 @@ public class EnvoyAmbassadorService extends TelemetryAmbassadorImplBase {
                                   LogEventRouter logEventRouter,
                                   MetricRouter metricRouter,
                                   TestMonitorResultsProducer testMonitorResultsProducer,
-                                  MeterRegistry meterRegistry, AgentHistoryRepository agentHistoryRepository) {
+                                  MeterRegistry meterRegistry,
+                                  AgentHistoryService agentHistoryService) {
         this.envoyRegistry = envoyRegistry;
         this.logEventRouter = logEventRouter;
         this.metricRouter = metricRouter;
         this.testMonitorResultsProducer = testMonitorResultsProducer;
-        this.agentHistoryRepository = agentHistoryRepository;
+        this.agentHistoryService = agentHistoryService;
 
         envoyAttach = meterRegistry.counter("messages","operation", "attach");
         attachDuration = meterRegistry.timer("attachDuration");
@@ -93,15 +90,6 @@ public class EnvoyAmbassadorService extends TelemetryAmbassadorImplBase {
 
         final Instant attachStartTime = Instant.now();
 
-        AgentHistory agentHistory = new AgentHistory()
-            .setConnectedAt(attachStartTime)
-            .setEnvoyId(envoyId)
-            .setResourceId(resourceId)
-            .setTenantId(tenantId)
-            .setZoneId(zoneId)
-            .setRemoteIp(remoteAddr.toString())
-            .setId(UUID.randomUUID());
-
         registerCancelHandler(tenantId, resourceId, envoyId, remoteAddr, responseObserver);
         envoyAttach.increment();
         try {
@@ -113,7 +101,7 @@ public class EnvoyAmbassadorService extends TelemetryAmbassadorImplBase {
                     return o;
                 })
                 .join();
-            agentHistoryRepository.save(agentHistory);
+            agentHistoryService.addAgentHistory(request, attachStartTime);
         } catch (StatusException e) {
             responseObserver.onError(e);
         } catch (Exception e) {
@@ -136,7 +124,7 @@ public class EnvoyAmbassadorService extends TelemetryAmbassadorImplBase {
                     resourceId, instanceId, tenantId, remoteAddr);
                 try {
                     envoyRegistry.remove(instanceId);
-                    addEnvoyConnectionClosedTime(tenantId, instanceId);
+                    agentHistoryService.addEnvoyConnectionClosedTime(tenantId, instanceId);
                 } catch (Exception e) {
                     log.warn("Trying to remove resourceId={} envoy={} for tenant={} from registry",
                         resourceId, instanceId, tenantId, e);
@@ -145,16 +133,6 @@ public class EnvoyAmbassadorService extends TelemetryAmbassadorImplBase {
         }
     }
 
-
-    private void addEnvoyConnectionClosedTime(String tenantId, String envoyId)  {
-        Optional<AgentHistory> agent = agentHistoryRepository.findByTenantIdAndEnvoyId(tenantId, envoyId);
-        if(!agent.isEmpty()) {
-            AgentHistory agentHistory = agent.get();
-            final Instant connectionClosedTime = Instant.now();
-            agentHistory.setDisconnectedAt(connectionClosedTime);
-            agentHistoryRepository.save(agentHistory);
-        }
-    }
 
     @Override
     public void postLogEvent(LogEvent request,
