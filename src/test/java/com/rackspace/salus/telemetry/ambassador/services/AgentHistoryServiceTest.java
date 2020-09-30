@@ -82,14 +82,19 @@ public class AgentHistoryServiceTest {
         .setZoneId("z-1")
         .setRemoteIp("0.0.0.0");
 
-    agentHistoryRepository.save(agentHistory);
-    currentAgentHistory = agentHistory;
+    currentAgentHistory = agentHistoryRepository.save(agentHistory);
   }
 
   @After
   public void tearDown() throws Exception {
     // transactional rollback should take care of purging test data, but do a deleteAll to be sure
     agentHistoryRepository.deleteAll();
+  }
+
+  @Test
+  public void testGetAgentHistoryForTenantAndId()  {
+    Optional<AgentHistory> agentHistoryOptional = agentHistoryService.getAgentHistoryForTenantAndEnvoyId("t-1","e-1");
+    assertExpectedAgentHistory(agentHistoryOptional);
   }
 
   @Test

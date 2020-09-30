@@ -29,7 +29,6 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 public class AgentHistoryDTO {
 
-  @JsonView(View.Admin.class)
   private UUID id;
   private String connectedAt;
   private String disconnectedAt;

@@ -91,6 +91,24 @@ public class AgentHistoryControllerTest {
   }
 
   @Test
+  public void testGetAgentHistoryForTenant_by_envoyIdFailed() throws Exception {
+    AgentHistory agentHistory = podamFactory.manufacturePojo(AgentHistory.class);
+    when(agentHistoryService.getAgentHistoryForTenantAndEnvoyId(anyString(), anyString()))
+        .thenReturn(Optional.empty());
+
+    String url = String.format("/api/tenant/%s/agent-history", agentHistory.getTenantId());
+
+    mockMvc.perform(get(url).param("envoyId",agentHistory.getEnvoyId()).contentType(MediaType.APPLICATION_JSON))
+        .andExpect(status().isOk())
+        .andDo(print())
+        .andExpect(content()
+            .contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+        .andExpect(jsonPath("$.content[0]").doesNotExist());
+    verify(agentHistoryService).getAgentHistoryForTenantAndEnvoyId(
+        agentHistory.getTenantId(), agentHistory.getEnvoyId());
+  }
+
+  @Test
   public void testGetAgentHistoryForTenant_by_resourceId() throws Exception {
     int numberOfAgentHistory = 1;
     // Use the APIs default Pageable settings
@@ -168,5 +186,41 @@ public class AgentHistoryControllerTest {
         .andExpect(status().isBadRequest())
         .andDo(print());
     verifyNoMoreInteractions(agentHistoryService);
+  }
+
+  @Test
+  public void testGetAgentHistoryById() throws Exception {
+    AgentHistory agentHistory = podamFactory.manufacturePojo(AgentHistory.class);
+    when(agentHistoryService.getAgentHistoryForIdAndTenantId(any(), anyString()))
+        .thenReturn(Optional.of(agentHistory));
+
+    String url = String.format("/api/tenant/%s/agent-history/%s", agentHistory.getTenantId(), agentHistory.getId());
+
+    mockMvc.perform(get(url).contentType(MediaType.APPLICATION_JSON))
+        .andExpect(status().isOk())
+        .andDo(print())
+        .andExpect(content()
+            .contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+        .andExpect(jsonPath("$.id", is(agentHistory.getId().toString())));
+
+    verify(agentHistoryService).getAgentHistoryForIdAndTenantId(
+        agentHistory.getId(), agentHistory.getTenantId());
+  }
+
+  @Test
+  public void testGetAgentHistoryById_not_found() throws Exception {
+    AgentHistory agentHistory = podamFactory.manufacturePojo(AgentHistory.class);
+    when(agentHistoryService.getAgentHistoryForIdAndTenantId(any(), anyString()))
+        .thenReturn(Optional.empty());
+
+    String url = String.format("/api/tenant/%s/agent-history/%s", agentHistory.getTenantId(), agentHistory.getId());
+
+    mockMvc.perform(get(url).contentType(MediaType.APPLICATION_JSON))
+        .andExpect(status().isNotFound())
+        .andDo(print())
+        .andExpect(content()
+            .contentTypeCompatibleWith(MediaType.APPLICATION_JSON));
+    verify(agentHistoryService).getAgentHistoryForIdAndTenantId(
+        agentHistory.getId(), agentHistory.getTenantId());
   }
 }

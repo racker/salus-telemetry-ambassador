@@ -18,9 +18,12 @@ package com.rackspace.salus.telemetry.ambassador.web.controller;
 
 import com.rackspace.salus.telemetry.ambassador.services.AgentHistoryService;
 import com.rackspace.salus.telemetry.ambassador.web.model.AgentHistoryDTO;
+import com.rackspace.salus.telemetry.entities.AgentHistory;
 import com.rackspace.salus.telemetry.model.NotFoundException;
 import com.rackspace.salus.telemetry.model.PagedContent;
 import io.swagger.annotations.ApiOperation;
+import java.util.Optional;
+import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Pageable;
 import org.springframework.util.StringUtils;
@@ -50,13 +53,15 @@ public class AgentHistoryController {
       Pageable pageable)
       throws NotFoundException {
     if(!StringUtils.isEmpty(envoyId) && !StringUtils.isEmpty(resourceId)) {
-      throw new IllegalArgumentException("EnvoyId and ResourceId both cannot be not-null");
+      throw new IllegalArgumentException("envoyId and resourceId both cannot be set");
     } else if(!StringUtils.isEmpty(envoyId))  {
-      return PagedContent.ofSingleton(
-          new AgentHistoryDTO(agentHistoryService.getAgentHistoryForTenantAndEnvoyId(tenantId, envoyId)
-          .orElseThrow(() ->
-              new NotFoundException(
-                  String.format("No Agent History found for tenant %s and envoy %s ", tenantId, envoyId)))));
+      Optional<AgentHistory> optional = agentHistoryService.getAgentHistoryForTenantAndEnvoyId(tenantId, envoyId);
+      if(optional.isPresent())  {
+        return PagedContent.ofSingleton(
+            new AgentHistoryDTO(optional.get()));
+      } else  {
+        return PagedContent.ofSingleton(null);
+      }
     } else if(!StringUtils.isEmpty(resourceId))  {
       return PagedContent.fromPage(
           agentHistoryService.getAgentHistoryForTenantAndResource(tenantId, resourceId, pageable))
@@ -66,5 +71,17 @@ public class AgentHistoryController {
           agentHistoryService.getAgentHistoryForTenant(tenantId, pageable))
           .map(AgentHistoryDTO::new);
     }
+  }
+
+  @GetMapping("/tenant/{tenantId}/agent-history/{uuid}")
+  @ApiOperation(value = "Gets specific Agent History")
+  public AgentHistoryDTO getAgentHistoryById(
+      @PathVariable String tenantId, @PathVariable UUID uuid)
+      throws NotFoundException {
+      AgentHistory agentHistory = agentHistoryService.getAgentHistoryForIdAndTenantId(uuid, tenantId).orElseThrow(
+          () -> new NotFoundException(String.format("No Agent History found for %s on tenant %s",
+              uuid, tenantId))
+      );
+      return new AgentHistoryDTO(agentHistory);
   }
 }

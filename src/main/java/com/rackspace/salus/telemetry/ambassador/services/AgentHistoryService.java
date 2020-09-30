@@ -25,6 +25,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 import java.net.SocketAddress;
 import java.time.Instant;
 import java.util.Optional;
+import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -44,7 +45,7 @@ public class AgentHistoryService {
       MeterRegistry meterRegistry)  {
     this.agentHistoryRepository = agentHistoryRepository;
     this.meterRegistry = meterRegistry;
-    agentHistoryError = Counter.builder("agent-history-save-failed").tag(MetricTags.SERVICE_METRIC_TAG,"AgentHistoryService");
+    agentHistoryError = Counter.builder("agent_history_save_failed").tag(MetricTags.SERVICE_METRIC_TAG,"AgentHistoryService");
   }
 
   public Optional<AgentHistory> getAgentHistoryForTenantAndEnvoyId(String tenantId, String envoyId) {
@@ -57,6 +58,10 @@ public class AgentHistoryService {
 
   public Page<AgentHistory> getAgentHistoryForTenant(String tenantId, Pageable pageable) {
     return agentHistoryRepository.findByTenantId(tenantId, pageable);
+  }
+
+  public Optional<AgentHistory> getAgentHistoryForIdAndTenantId(UUID agentHistoryId, String tenantId) {
+    return agentHistoryRepository.findByIdAndTenantId(agentHistoryId, tenantId);
   }
 
   public AgentHistory addAgentHistory(EnvoySummary request,
@@ -77,14 +82,14 @@ public class AgentHistoryService {
 
   public void addEnvoyConnectionClosedTime(String tenantId, String envoyId)  {
     Optional<AgentHistory> agent = agentHistoryRepository.findByTenantIdAndEnvoyId(tenantId, envoyId);
-    if(!agent.isEmpty()) {
+    if(!agent.isPresent()) {
       AgentHistory agentHistory = agent.get();
       final Instant connectionClosedTime = Instant.now();
       agentHistory.setDisconnectedAt(connectionClosedTime);
       agentHistoryRepository.save(agentHistory);
     } else  {
-      log.warn("unable to find connection history with tenantId= {} and envoyId= {} ",tenantId, envoyId);
-      agentHistoryError.tags(MetricTags.OPERATION_METRIC_TAG, "addAgentHistory", MetricTags.EXCEPTION_METRIC_TAG,"error occurred while saving agent history")
+      log.warn("Unable to find connection history with tenantId={} and envoyId={} ",tenantId, envoyId);
+      agentHistoryError.tags(MetricTags.OPERATION_METRIC_TAG, "addAgentHistory")
           .register(meterRegistry).increment();
     }
   }
