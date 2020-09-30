@@ -16,6 +16,7 @@
 
 package com.rackspace.salus.telemetry.ambassador.services;
 
+import com.rackspace.salus.common.config.MetricNames;
 import com.rackspace.salus.common.config.MetricTags;
 import com.rackspace.salus.services.TelemetryEdge.EnvoySummary;
 import com.rackspace.salus.telemetry.entities.AgentHistory;
@@ -45,7 +46,7 @@ public class AgentHistoryService {
       MeterRegistry meterRegistry)  {
     this.agentHistoryRepository = agentHistoryRepository;
     this.meterRegistry = meterRegistry;
-    agentHistoryError = Counter.builder("agent_history_save_failed").tag(MetricTags.SERVICE_METRIC_TAG,"AgentHistoryService");
+    agentHistoryError = Counter.builder(MetricNames.SERVICE_OPERATION_FAILED).tag(MetricTags.SERVICE_METRIC_TAG,"AgentHistoryService");
   }
 
   public Optional<AgentHistory> getAgentHistoryForTenantAndEnvoyId(String tenantId, String envoyId) {
@@ -80,17 +81,18 @@ public class AgentHistoryService {
     return agentHistoryRepository.save(agentHistory);
   }
 
-  public void addEnvoyConnectionClosedTime(String tenantId, String envoyId)  {
+  public Optional<AgentHistory> addEnvoyConnectionClosedTime(String tenantId, String envoyId)  {
     Optional<AgentHistory> agent = agentHistoryRepository.findByTenantIdAndEnvoyId(tenantId, envoyId);
-    if(!agent.isPresent()) {
+    if(agent.isPresent()) {
       AgentHistory agentHistory = agent.get();
       final Instant connectionClosedTime = Instant.now();
       agentHistory.setDisconnectedAt(connectionClosedTime);
-      agentHistoryRepository.save(agentHistory);
+      return Optional.of(agentHistoryRepository.save(agentHistory));
     } else  {
       log.warn("Unable to find connection history with tenantId={} and envoyId={} ",tenantId, envoyId);
       agentHistoryError.tags(MetricTags.OPERATION_METRIC_TAG, "addAgentHistory")
           .register(meterRegistry).increment();
+      return Optional.empty();
     }
   }
 }

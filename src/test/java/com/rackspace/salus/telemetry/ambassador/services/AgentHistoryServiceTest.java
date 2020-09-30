@@ -144,6 +144,13 @@ public class AgentHistoryServiceTest {
     assertThat(agentHistory.getZoneId(), equalTo(envoySummary.getZone()));
     assertThat(agentHistory.getRemoteIp(), equalTo(remoteAddress.toString()));
     assertThat(agentHistory.getConnectedAt(), equalTo(connectedAtInstant));
+  }
 
+  @Test
+  public void testAddEnvoyConnectionClosedTime()  {
+    Optional<AgentHistory> agentHistoryOptional = agentHistoryService.addEnvoyConnectionClosedTime("t-1","e-1");
+    assertTrue(agentHistoryOptional.isPresent());
+    assertThat(agentHistoryOptional.get().getDisconnectedAt(), notNullValue());
+    assertExpectedAgentHistory(agentHistoryOptional.get());
   }
 }

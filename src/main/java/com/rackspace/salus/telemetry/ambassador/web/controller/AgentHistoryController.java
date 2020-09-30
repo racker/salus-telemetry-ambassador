@@ -25,6 +25,7 @@ import io.swagger.annotations.ApiOperation;
 import java.util.Optional;
 import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -60,7 +61,7 @@ public class AgentHistoryController {
         return PagedContent.ofSingleton(
             new AgentHistoryDTO(optional.get()));
       } else  {
-        return PagedContent.ofSingleton(null);
+        return PagedContent.fromPage(Page.empty());
       }
     } else if(!StringUtils.isEmpty(resourceId))  {
       return PagedContent.fromPage(
