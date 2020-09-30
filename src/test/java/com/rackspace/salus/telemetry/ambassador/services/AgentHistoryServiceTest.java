@@ -94,13 +94,15 @@ public class AgentHistoryServiceTest {
   @Test
   public void testGetAgentHistoryForTenantAndId()  {
     Optional<AgentHistory> agentHistoryOptional = agentHistoryService.getAgentHistoryForTenantAndEnvoyId("t-1","e-1");
-    assertExpectedAgentHistory(agentHistoryOptional);
+    assertTrue(agentHistoryOptional.isPresent());
+    assertExpectedAgentHistory(agentHistoryOptional.get());
   }
 
   @Test
   public void testGetAgentHistoryForTenantAndEnvoyId()  {
     Optional<AgentHistory> agentHistoryOptional = agentHistoryService.getAgentHistoryForTenantAndEnvoyId("t-1","e-1");
-    assertExpectedAgentHistory(agentHistoryOptional);
+    assertTrue(agentHistoryOptional.isPresent());
+    assertExpectedAgentHistory(agentHistoryOptional.get());
   }
 
   @Test
@@ -109,6 +111,7 @@ public class AgentHistoryServiceTest {
     Pageable page = PageRequest.of(0, pageSize);
     Page<AgentHistory> result = agentHistoryService.getAgentHistoryForTenantAndResource("t-1","r-1", page);
     assertThat(result.getTotalElements(), equalTo(1L));
+    result.stream().forEach(e -> assertExpectedAgentHistory(e));
   }
 
   @Test
@@ -117,14 +120,15 @@ public class AgentHistoryServiceTest {
     Pageable page = PageRequest.of(0, pageSize);
     Page<AgentHistory> result = agentHistoryService.getAgentHistoryForTenant("t-1", page);
     assertThat(result.getTotalElements(), equalTo(1L));
+    result.stream().forEach(e -> assertExpectedAgentHistory(e));
   }
 
-  private void assertExpectedAgentHistory(Optional<AgentHistory> agentHistoryOptional) {
-    assertTrue(agentHistoryOptional.isPresent());
-    assertThat(agentHistoryOptional.get().getId(), notNullValue());
-    assertThat(agentHistoryOptional.get().getRemoteIp(), equalTo("0.0.0.0"));
-    assertThat(agentHistoryOptional.get().getResourceId(), equalTo("r-1"));
-    assertThat(agentHistoryOptional.get().getZoneId(), equalTo("z-1"));
+  private void assertExpectedAgentHistory(AgentHistory agentHistory) {
+    assertThat(agentHistory.getId(), notNullValue());
+    assertThat(agentHistory.getRemoteIp(), equalTo("0.0.0.0"));
+    assertThat(agentHistory.getZoneId(), equalTo("z-1"));
+    assertThat(agentHistory.getTenantId(), equalTo("t-1"));
+    assertThat(agentHistory.getResourceId(), equalTo("r-1"));
   }
 
   @Test
