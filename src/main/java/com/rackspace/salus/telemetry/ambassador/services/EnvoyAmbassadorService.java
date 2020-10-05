@@ -48,6 +48,7 @@ public class EnvoyAmbassadorService extends TelemetryAmbassadorImplBase {
     private final LogEventRouter logEventRouter;
     private final MetricRouter metricRouter;
     private final TestMonitorResultsProducer testMonitorResultsProducer;
+    private final AgentHistoryService agentHistoryService;
 
     // metrics counters
     private final Counter envoyAttach;
@@ -63,11 +64,13 @@ public class EnvoyAmbassadorService extends TelemetryAmbassadorImplBase {
                                   LogEventRouter logEventRouter,
                                   MetricRouter metricRouter,
                                   TestMonitorResultsProducer testMonitorResultsProducer,
-                                  MeterRegistry meterRegistry) {
+                                  MeterRegistry meterRegistry,
+                                  AgentHistoryService agentHistoryService) {
         this.envoyRegistry = envoyRegistry;
         this.logEventRouter = logEventRouter;
         this.metricRouter = metricRouter;
         this.testMonitorResultsProducer = testMonitorResultsProducer;
+        this.agentHistoryService = agentHistoryService;
 
         envoyAttach = meterRegistry.counter("messages","operation", "attach");
         attachDuration = meterRegistry.timer("attachDuration");
@@ -97,6 +100,7 @@ public class EnvoyAmbassadorService extends TelemetryAmbassadorImplBase {
                     return o;
                 })
                 .join();
+            agentHistoryService.addAgentHistory(request,remoteAddr, envoyId, tenantId, attachStartTime);
         } catch (StatusException e) {
             responseObserver.onError(e);
         } catch (Exception e) {
@@ -119,6 +123,7 @@ public class EnvoyAmbassadorService extends TelemetryAmbassadorImplBase {
                     resourceId, instanceId, tenantId, remoteAddr);
                 try {
                     envoyRegistry.remove(instanceId);
+                    agentHistoryService.addEnvoyConnectionClosedTime(tenantId, instanceId);
                 } catch (Exception e) {
                     log.warn("Trying to remove resourceId={} envoy={} for tenant={} from registry",
                         resourceId, instanceId, tenantId, e);
@@ -126,6 +131,7 @@ public class EnvoyAmbassadorService extends TelemetryAmbassadorImplBase {
             });
         }
     }
+
 
     @Override
     public void postLogEvent(LogEvent request,

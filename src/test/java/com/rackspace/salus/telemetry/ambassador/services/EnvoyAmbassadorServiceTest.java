@@ -87,6 +87,9 @@ public class EnvoyAmbassadorServiceTest {
   @MockBean
   TestMonitorResultsProducer testMonitorResultsProducer;
 
+  @MockBean
+  AgentHistoryService agentHistoryService;
+
   @Test
   public void testAttach_success() throws StatusException {
     @SuppressWarnings("unchecked") final StreamObserver<EnvoyInstruction> respStreamObserver =
