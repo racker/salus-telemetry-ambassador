@@ -22,8 +22,8 @@ import static org.hamcrest.Matchers.notNullValue;
 import static org.junit.Assert.assertTrue;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.rackspace.salus.monitor_management.config.DatabaseConfig;
 import com.rackspace.salus.services.TelemetryEdge.EnvoySummary;
+import com.rackspace.salus.telemetry.ambassador.config.DatabaseConfig;
 import com.rackspace.salus.telemetry.entities.AgentHistory;
 import com.rackspace.salus.telemetry.repositories.AgentHistoryRepository;
 import com.rackspace.salus.test.EnableTestContainersDatabase;
