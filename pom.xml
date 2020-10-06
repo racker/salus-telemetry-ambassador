@@ -197,6 +197,12 @@
             <version>0.1.0-SNAPSHOT</version>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>com.rackspace.salus</groupId>
+            <artifactId>salus-tools</artifactId>
+            <version>0.0.1-SNAPSHOT</version>
+            <scope>test</scope>
+        </dependency>
 
     </dependencies>
 
@@ -232,6 +238,99 @@
             <plugin>
                 <groupId>com.google.cloud.tools</groupId>
                 <artifactId>jib-maven-plugin</artifactId>
+            </plugin>
+
+            <plugin>
+                <groupId>com.github.kongchen</groupId>
+                <artifactId>swagger-maven-plugin</artifactId>
+                <version>3.1.8</version>
+                <configuration>
+                    <apiSources>
+                        <apiSource>
+                            <springmvc>true</springmvc>
+                            <locations>
+                                <location>com.rackspace.salus.telemetry.ambassador.web.model</location>
+                                <location>com.rackspace.salus.telemetry.ambassador.web.controller</location>
+                            </locations>
+                            <schemes>
+                                <scheme>https</scheme>
+                                <scheme>http</scheme>
+                            </schemes>
+                            <info>
+                                <title>Salus Agent</title>
+                                <version>0.1.0</version>
+                            </info>
+                            <swaggerDirectory>${project.build.directory}/generated/swagger</swaggerDirectory>
+                            <outputFormats>json</outputFormats>
+                        </apiSource>
+                    </apiSources>
+                </configuration>
+                <executions>
+                    <execution>
+                        <phase>compile</phase>
+                        <goals>
+                            <goal>generate</goal>
+                        </goals>
+                    </execution>
+                </executions>
+                <dependencies>
+                    <dependency>
+                        <groupId>io.swagger</groupId>
+                        <artifactId>swagger-hibernate-validations</artifactId>
+                        <version>1.5.6</version>
+                    </dependency>
+                </dependencies>
+            </plugin>
+
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>1.2.1</version>
+                <executions>
+                    <execution>
+                        <phase>test-compile</phase>
+                        <goals>
+                            <goal>java</goal>
+                        </goals>
+                    </execution>
+                </executions>
+                <configuration>
+                    <classpathScope>test</classpathScope>
+                    <mainClass>com.rackspace.salus.salus_tools.converter.SwaggerJsonConverter</mainClass>
+                    <arguments>
+                        <argument>${project.build.directory}/generated/swagger</argument>
+                        <argument>/tenant/{tenantId}=</argument>
+                        <argument>/admin=</argument>
+                    </arguments>
+                </configuration>
+            </plugin>
+
+            <plugin>
+                <groupId>io.swagger</groupId>
+                <artifactId>swagger-codegen-maven-plugin</artifactId>
+                <version>2.4.13</version>
+                <executions>
+                    <execution>
+                        <id>generate-html-admin</id>
+                        <phase>package</phase>
+                        <goals><goal>generate</goal></goals>
+                        <configuration>
+                            <inputSpec>${project.build.directory}/generated/swagger/admin/swagger.json</inputSpec>
+                            <language>html</language>
+                            <output>${project.build.directory}/generated/swagger/admin</output>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>generate-html-public</id>
+                        <phase>package</phase>
+                        <goals><goal>generate</goal></goals>
+                        <configuration>
+                            <inputSpec>${project.build.directory}/generated/swagger/public/swagger.json</inputSpec>
+                            <language>html</language>
+                            <output>${project.build.directory}/generated/swagger/public</output>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
 
         </plugins>
