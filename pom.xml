@@ -250,14 +250,14 @@
                             <springmvc>true</springmvc>
                             <locations>
                                 <location>com.rackspace.salus.telemetry.ambassador.web.model</location>
-                                <location>com.rackspace.salus.telemetry.ambassador.web.controller.AgentHistoryController</location>
+                                <location>com.rackspace.salus.telemetry.ambassador.web.controller</location>
                             </locations>
                             <schemes>
                                 <scheme>https</scheme>
                                 <scheme>http</scheme>
                             </schemes>
                             <info>
-                                <title>Salus Ambassador</title>
+                                <title>Salus Agent</title>
                                 <version>0.1.0</version>
                             </info>
                             <swaggerDirectory>${project.build.directory}/generated/swagger</swaggerDirectory>
