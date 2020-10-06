@@ -112,5 +112,14 @@ steps:
     - 'CLOUDSDK_CONTAINER_CLUSTER=${_CLOUDSDK_CONTAINER_CLUSTER}'
     - 'TILLERLESS=true'
 
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    args: ['gsutil', 'cp', 'target/generated/swagger/public/index.html', 'gs://salus_www/ambassador/public/']
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    args: ['gsutil', 'cp', 'target/generated/swagger/admin/index.html', 'gs://salus_www/ambassador/admin/']
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    args: ['gsutil', 'cp', 'target/generated/swagger/public/swagger.json', 'gs://salus_www/ambassador/public/']
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    args: ['gsutil', 'cp', 'target/generated/swagger/admin/swagger.json', 'gs://salus_www/ambassador/admin/']
+
 options:
     substitution_option: 'ALLOW_LOOSE'
