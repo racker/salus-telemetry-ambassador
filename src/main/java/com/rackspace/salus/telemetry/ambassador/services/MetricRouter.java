@@ -20,8 +20,10 @@ import com.google.protobuf.Timestamp;
 import com.google.protobuf.util.JsonFormat;
 import com.rackspace.monplat.protocol.Metric;
 import com.rackspace.monplat.protocol.UniversalMetricFrame;
+import com.rackspace.monplat.protocol.UniversalMetricFrame.AccountType;
 import com.rackspace.salus.services.TelemetryEdge;
 import com.rackspace.salus.services.TelemetryEdge.PostedMetric;
+import com.rackspace.salus.telemetry.ambassador.parser.FieldParser;
 import com.rackspace.salus.telemetry.messaging.KafkaMessageType;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -37,6 +39,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.avro.io.EncoderFactory;
 import org.apache.logging.log4j.util.Strings;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.util.Pair;
 import org.springframework.stereotype.Service;
 
 /**
@@ -84,7 +87,7 @@ public class MetricRouter {
         // measurement is not necessarily owned by the tenant of the monitor nor running on the
         // resource of the monitor.
 
-        String resourceId = tagsMap.remove(ConfigInstructionsBuilder.LABEL_RESOURCE);
+        String resourceId = tagsMap.get(ConfigInstructionsBuilder.LABEL_RESOURCE);
         final String measurementName = nameTagValue.getName();
         if (resourceId == null) {
             resourceId = envoyRegistry.getResourceId(envoyId);
@@ -137,18 +140,30 @@ public class MetricRouter {
                 .putAllMetadata(tagsMap)
                 .build()).collect(Collectors.toList()));
 
-        final UniversalMetricFrame universalMetricFrame = UniversalMetricFrame.newBuilder()
-            .setAccountType(UniversalMetricFrame.AccountType.MANAGED_HOSTING)
+        // discover the account and device by using the resourceId
+        Pair<AccountType, String> accountAndDevice = FieldParser.getDeviceIdForResourceId(resourceId);
+        AccountType accountType = AccountType.UNKNOWN;
+        String deviceId = null;
+        if (accountAndDevice != null) {
+            accountType = accountAndDevice.getFirst();
+            deviceId = accountAndDevice.getSecond();
+        }
+
+        UniversalMetricFrame.Builder frameBuilder = UniversalMetricFrame.newBuilder()
+            .setAccountType(accountType)
             .setTenantId(tenantId)
-            .setDevice(resourceId)
             .putAllDeviceMetadata(resourceLabels)
             .putAllSystemMetadata(Collections.singletonMap("envoy_id", envoyId))
             .setMonitoringSystem(UniversalMetricFrame.MonitoringSystem.SALUS)
-            .addAllMetrics(metrics)
-            .build();
+            .addAllMetrics(metrics);
 
+        if (deviceId != null) {
+            // cannot set fields to `null` so it will remain unset if there is no deviceId
+            frameBuilder.setDevice(deviceId);
+        }
+
+        final UniversalMetricFrame universalMetricFrame = frameBuilder.build();
         try {
-
             metricsRouted.increment();
             kafkaEgress.send(Strings.join(List.of(tenantId, resourceId, measurementName), ','),
                 KafkaMessageType.METRIC, JsonFormat.printer().print(universalMetricFrame));
