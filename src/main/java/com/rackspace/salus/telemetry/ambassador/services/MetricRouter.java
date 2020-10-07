@@ -101,6 +101,7 @@ public class MetricRouter {
                     measurementName, tenantId, envoyId, nameTagValue.getTagsMap());
                 return;
             }
+            systemMetadata.put(ConfigInstructionsBuilder.LABEL_RESOURCE, resourceId);
         }
 
         final String taggedTargetTenant = systemMetadata.remove(ConfigInstructionsBuilder.LABEL_TARGET_TENANT);

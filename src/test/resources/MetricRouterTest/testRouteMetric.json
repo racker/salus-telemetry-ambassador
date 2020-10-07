@@ -8,6 +8,7 @@
   },
   "monitoringSystem": "SALUS",
   "systemMetadata": {
+    "resource_id": "r-1",
     "monitor_selector_scope": "my-scope",
     "monitor_id": "m-1",
     "monitor_type": "my-type",
