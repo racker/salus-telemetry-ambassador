@@ -32,8 +32,10 @@ import java.time.Instant;
 import java.time.format.DateTimeFormatter;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.avro.io.EncoderFactory;
@@ -81,13 +83,14 @@ public class MetricRouter {
 
         final Instant timestamp = Instant.ofEpochMilli(nameTagValue.getTimestamp());
 
-        final Map<String, String> tagsMap = new HashMap<>(nameTagValue.getTagsMap());
+        final Map<String, String> systemMetadata = new HashMap<>(nameTagValue.getTagsMap());
+        systemMetadata.put("envoy_id", envoyId);
 
         // Resolve any tags injected for remote monitors where the envoy originating the
         // measurement is not necessarily owned by the tenant of the monitor nor running on the
         // resource of the monitor.
 
-        String resourceId = tagsMap.get(ConfigInstructionsBuilder.LABEL_RESOURCE);
+        String resourceId = systemMetadata.get(ConfigInstructionsBuilder.LABEL_RESOURCE);
         final String measurementName = nameTagValue.getName();
         if (resourceId == null) {
             resourceId = envoyRegistry.getResourceId(envoyId);
@@ -100,9 +103,19 @@ public class MetricRouter {
             }
         }
 
-        final String taggedTargetTenant = tagsMap.remove(ConfigInstructionsBuilder.LABEL_TARGET_TENANT);
+        final String taggedTargetTenant = systemMetadata.remove(ConfigInstructionsBuilder.LABEL_TARGET_TENANT);
         if (taggedTargetTenant != null) {
             tenantId = taggedTargetTenant;
+        }
+
+        // systemMetadata should only contain system fields
+        // anything else is moved to metricMetadata
+        final Set<String> keys = new HashSet<>(systemMetadata.keySet());
+        Map<String, String> metricMetadata = new HashMap<>();
+        for (String key : keys) {
+            if (!ConfigInstructionsBuilder.SYSTEM_METADATA_KEYS.contains(key)) {
+                metricMetadata.put(key, systemMetadata.remove(key));
+            }
         }
 
         Map<String, String> resourceLabels = resourceLabelsService.getResourceLabels(tenantId, resourceId);
@@ -121,7 +134,7 @@ public class MetricRouter {
                 .setTimestamp(getProtoBufTimestamp(timestamp))
                 .setName(entry.getKey())
                 .setInt(entry.getValue())
-                .putAllMetadata(tagsMap)
+                .putAllMetadata(metricMetadata)
                 .build()).collect(Collectors.toList());
         metrics.addAll(nameTagValue.getFvaluesMap().entrySet().stream()
             .map(entry -> Metric.newBuilder()
@@ -129,7 +142,7 @@ public class MetricRouter {
                 .setTimestamp(getProtoBufTimestamp(timestamp))
                 .setName(entry.getKey())
                 .setFloat(entry.getValue())
-                .putAllMetadata(tagsMap)
+                .putAllMetadata(metricMetadata)
                 .build()).collect(Collectors.toList()));
         metrics.addAll(nameTagValue.getSvaluesMap().entrySet().stream()
             .map(entry -> Metric.newBuilder()
@@ -137,7 +150,7 @@ public class MetricRouter {
                 .setTimestamp(getProtoBufTimestamp(timestamp))
                 .setName(entry.getKey())
                 .setString(entry.getValue())
-                .putAllMetadata(tagsMap)
+                .putAllMetadata(metricMetadata)
                 .build()).collect(Collectors.toList()));
 
         // discover the account and device by using the resourceId
@@ -153,7 +166,7 @@ public class MetricRouter {
             .setAccountType(accountType)
             .setTenantId(tenantId)
             .putAllDeviceMetadata(resourceLabels)
-            .putAllSystemMetadata(Collections.singletonMap("envoy_id", envoyId))
+            .putAllSystemMetadata(systemMetadata)
             .setMonitoringSystem(UniversalMetricFrame.MonitoringSystem.SALUS)
             .addAllMetrics(metrics);
 

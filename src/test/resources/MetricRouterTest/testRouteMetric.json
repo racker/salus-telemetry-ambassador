@@ -8,6 +8,9 @@
   },
   "monitoringSystem": "SALUS",
   "systemMetadata": {
+    "monitor_selector_scope": "my-scope",
+    "monitor_id": "m-1",
+    "monitor_type": "my-type",
     "envoy_id": "envoy-1"
   },
   "metrics": [{

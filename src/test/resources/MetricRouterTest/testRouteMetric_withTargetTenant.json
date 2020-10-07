@@ -8,6 +8,7 @@
   },
   "monitoringSystem": "SALUS",
   "systemMetadata": {
+    "resource_id": "r-other",
     "envoy_id": "envoy-1"
   },
   "metrics": [{
@@ -15,8 +16,7 @@
     "group": "cpu",
     "name": "usage",
     "metadata": {
-      "cpu": "cpu1",
-      "resource_id": "r-other"
+      "cpu": "cpu1"
     },
     "float": 1.45
   }, {
@@ -24,8 +24,7 @@
     "group": "cpu",
     "name": "status",
     "metadata": {
-      "cpu": "cpu1",
-      "resource_id": "r-other"
+      "cpu": "cpu1"
     },
     "string": "enabled"
   }]
