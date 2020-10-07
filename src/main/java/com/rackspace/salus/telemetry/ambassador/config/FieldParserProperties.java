@@ -40,7 +40,8 @@ public class FieldParserProperties {
       "cloud_v1", String.format("cloud\\:(?<%s>%s)", DEVICE_GROUP, INT_REGEX),
       "cloud_v2", String.format("cloud\\:(?<%s>%s)", DEVICE_GROUP, UUID_REGEX),
       "dedicated", String.format("dedicated\\:(?<%s>%s+)", DEVICE_GROUP, INT_REGEX),
-      "noAccountType", String.format("bad\\:(?<%s>%s)", DEVICE_GROUP, INT_REGEX)
+      "noAccountType", String.format("bad\\:(?<%s>%s)", DEVICE_GROUP, INT_REGEX),
+      "test", String.format("(?<%s>r-[a-zA-Z0-9]+)", DEVICE_GROUP)
   );
 
   /**
@@ -52,6 +53,7 @@ public class FieldParserProperties {
   public static final Map<String, AccountType> deviceToAccount = Map.of(
       "cloud_v1", AccountType.CLOUD,
       "cloud_v2", AccountType.CLOUD,
-      "dedicated", AccountType.MANAGED_HOSTING
+      "dedicated", AccountType.MANAGED_HOSTING,
+      "test", AccountType.MANAGED_HOSTING
   );
 }

@@ -32,6 +32,7 @@ import com.rackspace.salus.services.TelemetryEdge.ConfigurationOp.Type;
 import com.rackspace.salus.services.TelemetryEdge.EnvoyInstruction;
 import com.rackspace.salus.services.TelemetryEdge.EnvoyInstructionConfigure;
 import com.rackspace.salus.telemetry.messaging.OperationType;
+import com.rackspace.salus.telemetry.model.ConfigSelectorScope;
 import com.rackspace.salus.telemetry.model.MonitorType;
 import java.time.Duration;
 import java.util.List;
@@ -59,6 +60,7 @@ public class ConfigInstructionsBuilderTest {
             .setRenderedContent("content1")
             .setMonitorId(m1)
             .setMonitorType(MonitorType.cpu)
+            .setSelectorScope(ConfigSelectorScope.LOCAL)
             .setResourceId("r-1")
             .setInterval(Duration.ofSeconds(30)),
         OperationType.CREATE
@@ -72,6 +74,7 @@ public class ConfigInstructionsBuilderTest {
             .setMonitorId(m2)
             // differ the monitor type just for some variance
             .setMonitorType(MonitorType.mem)
+            .setSelectorScope(ConfigSelectorScope.LOCAL)
             .setResourceId("r-1")
             .setInterval(Duration.ofSeconds(31)),
         OperationType.UPDATE
@@ -84,6 +87,7 @@ public class ConfigInstructionsBuilderTest {
             .setRenderedContent("")
             .setMonitorId(m3)
             .setMonitorType(MonitorType.cpu)
+            .setSelectorScope(ConfigSelectorScope.LOCAL)
             .setResourceId("r-1")
             .setInterval(Duration.ofSeconds(32)),
         OperationType.DELETE
@@ -96,6 +100,7 @@ public class ConfigInstructionsBuilderTest {
             .setRenderedContent("content4")
             .setMonitorId(m4)
             .setMonitorType(MonitorType.log)
+            .setSelectorScope(ConfigSelectorScope.LOCAL)
             .setResourceId("r-1")
             .setInterval(Duration.ofSeconds(33)),
         OperationType.CREATE
@@ -107,6 +112,7 @@ public class ConfigInstructionsBuilderTest {
             .setRenderedContent("content5")
             .setMonitorId(m5)
             .setMonitorType(MonitorType.cpu)
+            .setSelectorScope(ConfigSelectorScope.LOCAL)
             .setTenantId("t-1")
             .setResourceId("r-2")
             .setZoneName("z-1")

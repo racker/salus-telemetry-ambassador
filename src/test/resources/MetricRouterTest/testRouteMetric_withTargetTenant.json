@@ -15,7 +15,8 @@
     "group": "cpu",
     "name": "usage",
     "metadata": {
-      "cpu": "cpu1"
+      "cpu": "cpu1",
+      "resource_id": "r-other"
     },
     "float": 1.45
   }, {
@@ -23,7 +24,8 @@
     "group": "cpu",
     "name": "status",
     "metadata": {
-      "cpu": "cpu1"
+      "cpu": "cpu1",
+      "resource_id": "r-other"
     },
     "string": "enabled"
   }]
