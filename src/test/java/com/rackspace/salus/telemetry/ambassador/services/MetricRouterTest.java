@@ -41,132 +41,132 @@ import org.springframework.util.FileCopyUtils;
 
 @RunWith(SpringRunner.class)
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE,
-classes = {MetricRouter.class, SimpleMeterRegistry.class, FieldParser.class})
+    classes = {MetricRouter.class, SimpleMeterRegistry.class, FieldParser.class})
 public class MetricRouterTest {
 
-    @MockBean
-    KafkaEgress kafkaEgress;
+  @MockBean
+  KafkaEgress kafkaEgress;
 
-    @MockBean
-    EnvoyRegistry envoyRegistry;
+  @MockBean
+  EnvoyRegistry envoyRegistry;
 
-    @MockBean
-    ResourceLabelsService resourceLabelsService;
+  @MockBean
+  ResourceLabelsService resourceLabelsService;
 
-    @Autowired
-    MetricRouter metricRouter;
+  @Autowired
+  MetricRouter metricRouter;
 
-    @Autowired
-    FieldParser fieldParser;
+  @Autowired
+  FieldParser fieldParser;
 
-    @Test
-    public void testRouteMetric() throws IOException {
-
-        Map<String, String> envoyLabels = new HashMap<>();
-        envoyLabels.put("hostname", "host1");
-        envoyLabels.put("os", "linux");
-
-        when(resourceLabelsService.getResourceLabels(any(), any()))
-            .thenReturn(envoyLabels);
-
-        when(envoyRegistry.getResourceId(any()))
-            .thenReturn("r-1");
-
-        final TelemetryEdge.PostedMetric postedMetric = TelemetryEdge.PostedMetric.newBuilder()
-            .setMetric(TelemetryEdge.Metric.newBuilder()
-                .setNameTagValue(TelemetryEdge.NameTagValueMetric.newBuilder()
-                    .setTimestamp(1539030613123L)
-                    .setName("cpu")
-                    .putTags("cpu", "cpu1")
-                    .putTags(ConfigInstructionsBuilder.LABEL_MONITOR_ID, "m-1")
-                    .putTags(ConfigInstructionsBuilder.LABEL_MONITOR_TYPE, "my-type")
-                    .putTags(ConfigInstructionsBuilder.LABEL_MONITOR_SCOPE, "my-scope")
-                    .putFvalues("usage", 1.45)
-                    .putSvalues("status", "enabled")
-                    .build())
-            )
-            .build();
-
-        metricRouter.route("t1", "envoy-1", postedMetric);
-
-        verify(resourceLabelsService).getResourceLabels("t1", "r-1");
-        verify(envoyRegistry).getResourceId("envoy-1");
-        verify(kafkaEgress).send("t1,r-1,cpu", KafkaMessageType.METRIC,
-            readContent("/MetricRouterTest/testRouteMetric.json"));
-
-        verifyNoMoreInteractions(kafkaEgress, envoyRegistry);
+  private static String readContent(String resource) throws IOException {
+    try (InputStream in = new ClassPathResource(resource).getInputStream()) {
+      return FileCopyUtils.copyToString(new InputStreamReader(in));
     }
+  }
 
-    @Test
-    public void testRouteMetric_withTargetTenant() throws IOException {
+  @Test
+  public void testRouteMetric() throws IOException {
 
-        Map<String, String> envoyLabels = new HashMap<>();
-        envoyLabels.put("hostname", "host1");
-        envoyLabels.put("os", "linux");
+    Map<String, String> envoyLabels = new HashMap<>();
+    envoyLabels.put("hostname", "host1");
+    envoyLabels.put("os", "linux");
 
-        when(resourceLabelsService.getResourceLabels(any(), any()))
-            .thenReturn(envoyLabels);
+    when(resourceLabelsService.getResourceLabels(any(), any()))
+        .thenReturn(envoyLabels);
 
-        when(envoyRegistry.getResourceId(any()))
-            .thenReturn("r-of-envoy");
+    when(envoyRegistry.getResourceId(any()))
+        .thenReturn("r-1");
 
-        final TelemetryEdge.PostedMetric postedMetric = TelemetryEdge.PostedMetric.newBuilder()
-            .setMetric(TelemetryEdge.Metric.newBuilder()
-                .setNameTagValue(TelemetryEdge.NameTagValueMetric.newBuilder()
-                    .setTimestamp(1539030613123L)
-                    .setName("cpu")
-                    .putTags("cpu", "cpu1")
-                    .putTags(ConfigInstructionsBuilder.LABEL_TARGET_TENANT, "t-some-other")
-                    .putTags(ConfigInstructionsBuilder.LABEL_RESOURCE, "r-other")
-                    .putFvalues("usage", 1.45)
-                    .putSvalues("status", "enabled")
-                    .build())
-            )
-            .build();
+    final TelemetryEdge.PostedMetric postedMetric = TelemetryEdge.PostedMetric.newBuilder()
+        .setMetric(TelemetryEdge.Metric.newBuilder()
+            .setNameTagValue(TelemetryEdge.NameTagValueMetric.newBuilder()
+                .setTimestamp(1539030613123L)
+                .setName("cpu")
+                .putTags("cpu", "cpu1")
+                .putTags(ConfigInstructionsBuilder.LABEL_MONITOR_ID, "m-1")
+                .putTags(ConfigInstructionsBuilder.LABEL_MONITOR_TYPE, "my-type")
+                .putTags(ConfigInstructionsBuilder.LABEL_MONITOR_SCOPE, "my-scope")
+                .putFvalues("usage", 1.45)
+                .putSvalues("status", "enabled")
+                .build())
+        )
+        .build();
 
-        metricRouter.route("t1", "envoy-1", postedMetric);
+    metricRouter.route("t1", "envoy-1", postedMetric);
 
-        verify(resourceLabelsService).getResourceLabels("t-some-other", "r-other");
-        verify(kafkaEgress).send("t-some-other,r-other,cpu", KafkaMessageType.METRIC,
-            readContent("/MetricRouterTest/testRouteMetric_withTargetTenant.json"));
+    verify(resourceLabelsService).getResourceLabels("t1", "r-1");
+    verify(envoyRegistry).getResourceId("envoy-1");
+    verify(kafkaEgress).send("t1,r-1,cpu", KafkaMessageType.METRIC,
+        readContent("/MetricRouterTest/testRouteMetric.json"));
 
-        verifyNoMoreInteractions(kafkaEgress, envoyRegistry);
-    }
+    verifyNoMoreInteractions(kafkaEgress, envoyRegistry);
+  }
 
-    @Test
-    public void testRouteMetric_invalid_noResourceId() {
-        Map<String, String> envoyLabels = new HashMap<>();
-        envoyLabels.put("hostname", "host1");
-        envoyLabels.put("os", "linux");
+  @Test
+  public void testRouteMetric_withTargetTenant() throws IOException {
 
-        when(resourceLabelsService.getResourceLabels(any(), any()))
-            .thenReturn(envoyLabels);
+    Map<String, String> envoyLabels = new HashMap<>();
+    envoyLabels.put("hostname", "host1");
+    envoyLabels.put("os", "linux");
 
-        when(envoyRegistry.getResourceId(any()))
-            // induce the scenario
-            .thenReturn(null);
+    when(resourceLabelsService.getResourceLabels(any(), any()))
+        .thenReturn(envoyLabels);
 
-        final TelemetryEdge.PostedMetric postedMetric = TelemetryEdge.PostedMetric.newBuilder()
-            .setMetric(TelemetryEdge.Metric.newBuilder()
-                .setNameTagValue(TelemetryEdge.NameTagValueMetric.newBuilder()
-                    .setTimestamp(1539030613123L)
-                    .setName("cpu")
-                    .putTags("cpu", "cpu1")
-                    .putFvalues("usage", 1.45)
-                    .putSvalues("status", "enabled")
-                    .build())
-            )
-            .build();
+    when(envoyRegistry.getResourceId(any()))
+        .thenReturn("r-of-envoy");
 
-        metricRouter.route("t-1", "e-1", postedMetric);
+    final TelemetryEdge.PostedMetric postedMetric = TelemetryEdge.PostedMetric.newBuilder()
+        .setMetric(TelemetryEdge.Metric.newBuilder()
+            .setNameTagValue(TelemetryEdge.NameTagValueMetric.newBuilder()
+                .setTimestamp(1539030613123L)
+                .setName("cpu")
+                .putTags("cpu", "cpu1")
+                .putTags(ConfigInstructionsBuilder.LABEL_TARGET_TENANT, "t-some-other")
+                .putTags(ConfigInstructionsBuilder.LABEL_RESOURCE, "r-other")
+                .putFvalues("usage", 1.45)
+                .putSvalues("status", "enabled")
+                .build())
+        )
+        .build();
 
-        verify(envoyRegistry).getResourceId("e-1");
-        verifyNoMoreInteractions(kafkaEgress, envoyRegistry);
-    }
+    metricRouter.route("t1", "envoy-1", postedMetric);
 
-    private static String readContent(String resource) throws IOException {
-        try (InputStream in = new ClassPathResource(resource).getInputStream()) {
-            return FileCopyUtils.copyToString(new InputStreamReader(in));
-        }
-    }
+    verify(resourceLabelsService).getResourceLabels("t-some-other", "r-other");
+    verify(kafkaEgress).send("t-some-other,r-other,cpu", KafkaMessageType.METRIC,
+        readContent("/MetricRouterTest/testRouteMetric_withTargetTenant.json"));
+
+    verifyNoMoreInteractions(kafkaEgress, envoyRegistry);
+  }
+
+  @Test
+  public void testRouteMetric_invalid_noResourceId() {
+    Map<String, String> envoyLabels = new HashMap<>();
+    envoyLabels.put("hostname", "host1");
+    envoyLabels.put("os", "linux");
+
+    when(resourceLabelsService.getResourceLabels(any(), any()))
+        .thenReturn(envoyLabels);
+
+    when(envoyRegistry.getResourceId(any()))
+        // induce the scenario
+        .thenReturn(null);
+
+    final TelemetryEdge.PostedMetric postedMetric = TelemetryEdge.PostedMetric.newBuilder()
+        .setMetric(TelemetryEdge.Metric.newBuilder()
+            .setNameTagValue(TelemetryEdge.NameTagValueMetric.newBuilder()
+                .setTimestamp(1539030613123L)
+                .setName("cpu")
+                .putTags("cpu", "cpu1")
+                .putFvalues("usage", 1.45)
+                .putSvalues("status", "enabled")
+                .build())
+        )
+        .build();
+
+    metricRouter.route("t-1", "e-1", postedMetric);
+
+    verify(envoyRegistry).getResourceId("e-1");
+    verifyNoMoreInteractions(kafkaEgress, envoyRegistry);
+  }
 }
