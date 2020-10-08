@@ -36,7 +36,7 @@ public class FieldParserProperties {
    * The regex can be ran against a resourceId to determine the type of device it relates to,
    * providing the ability to retrieve the deviceId.
    */
-  public final Map<String, String> deviceTypeRegex = Map.of(
+  Map<String, String> deviceTypeRegex = Map.of(
       "cloud_v1", String.format("cloud\\:(?<%s>%s)", DEVICE_GROUP, INT_REGEX),
       "cloud_v2", String.format("cloud\\:(?<%s>%s)", DEVICE_GROUP, UUID_REGEX),
       "dedicated", String.format("dedicated\\:(?<%s>%s+)", DEVICE_GROUP, INT_REGEX),
@@ -50,7 +50,7 @@ public class FieldParserProperties {
    * Once the device is found using deviceTypeRegex, the account type can then be
    * determined via this map.
    */
-  public final Map<String, AccountType> deviceToAccount = Map.of(
+  Map<String, AccountType> deviceToAccount = Map.of(
       "cloud_v1", AccountType.CLOUD,
       "cloud_v2", AccountType.CLOUD,
       "dedicated", AccountType.MANAGED_HOSTING,
