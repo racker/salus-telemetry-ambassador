@@ -29,7 +29,6 @@ import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.io.IOException;
 import java.time.Instant;
-import java.time.format.DateTimeFormatter;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -38,7 +37,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.avro.io.EncoderFactory;
 import org.apache.logging.log4j.util.Strings;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.util.Pair;
@@ -51,23 +49,22 @@ import org.springframework.stereotype.Service;
 @Service
 @Slf4j
 public class MetricRouter {
-    private final DateTimeFormatter universalTimestampFormatter;
-    private final EncoderFactory avroEncoderFactory;
     private final KafkaEgress kafkaEgress;
     private final EnvoyRegistry envoyRegistry;
     private final ResourceLabelsService resourceLabelsService;
+    private final FieldParser fieldParser;
     private final Counter metricsRouted;
     private final Counter missingResourceLabelTracking;
 
     @Autowired
-    public MetricRouter(EncoderFactory avroEncoderFactory, KafkaEgress kafkaEgress,
-                        EnvoyRegistry envoyRegistry, ResourceLabelsService resourceLabelsService,
-                        MeterRegistry meterRegistry) {
-        this.avroEncoderFactory = avroEncoderFactory;
+    public MetricRouter(KafkaEgress kafkaEgress,
+        EnvoyRegistry envoyRegistry, ResourceLabelsService resourceLabelsService,
+        FieldParser fieldParser,
+        MeterRegistry meterRegistry) {
         this.kafkaEgress = kafkaEgress;
         this.envoyRegistry = envoyRegistry;
         this.resourceLabelsService = resourceLabelsService;
-        universalTimestampFormatter = DateTimeFormatter.ISO_INSTANT;
+        this.fieldParser = fieldParser;
 
         metricsRouted = meterRegistry.counter("routed", "type", "metrics");
         missingResourceLabelTracking = meterRegistry.counter("errors", "cause", "missingResourceLabelTracking");
@@ -155,7 +152,7 @@ public class MetricRouter {
                 .build()).collect(Collectors.toList()));
 
         // discover the account and device by using the resourceId
-        Pair<AccountType, String> accountAndDevice = FieldParser.getDeviceIdForResourceId(resourceId);
+        Pair<AccountType, String> accountAndDevice = fieldParser.getDeviceIdForResourceId(resourceId);
         AccountType accountType = AccountType.UNKNOWN;
         String deviceId = null;
         if (accountAndDevice != null) {

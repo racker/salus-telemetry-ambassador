@@ -22,9 +22,8 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import com.rackspace.salus.services.TelemetryEdge;
-import com.rackspace.salus.telemetry.ambassador.config.AvroConfig;
+import com.rackspace.salus.telemetry.ambassador.parser.FieldParser;
 import com.rackspace.salus.telemetry.messaging.KafkaMessageType;
-import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.io.IOException;
 import java.io.InputStream;
@@ -36,25 +35,14 @@ import org.junit.runner.RunWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.Import;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.test.context.junit4.SpringRunner;
 import org.springframework.util.FileCopyUtils;
 
 @RunWith(SpringRunner.class)
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE,
+classes = {MetricRouter.class, SimpleMeterRegistry.class, FieldParser.class})
 public class MetricRouterTest {
-
-    @Configuration
-    @Import({MetricRouter.class, AvroConfig.class})
-    static class TestConfig {
-        @Bean
-        MeterRegistry meterRegistry() {
-            return new SimpleMeterRegistry();
-        }
-    }
 
     @MockBean
     KafkaEgress kafkaEgress;
@@ -67,6 +55,9 @@ public class MetricRouterTest {
 
     @Autowired
     MetricRouter metricRouter;
+
+    @Autowired
+    FieldParser fieldParser;
 
     @Test
     public void testRouteMetric() throws IOException {
