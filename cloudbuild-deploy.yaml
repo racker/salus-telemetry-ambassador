@@ -152,5 +152,7 @@ steps:
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     args: ['gsutil', 'cp', 'target/generated/swagger/admin/swagger.json', 'gs://salus_www/ambassador/admin/']
 
+timeout: 1800s
+
 options:
     substitution_option: 'ALLOW_LOOSE'
