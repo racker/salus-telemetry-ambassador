@@ -131,11 +131,12 @@ steps:
     - -c
     - |
       gcloud container clusters get-credentials ${_CLOUDSDK_CONTAINER_CLUSTER}
-      helm upgrade --install e2e-ci --set service.type='LoadBalancer' --wait /workspace/helm-salus-e2e
+      export E2E_DEPLOYMENT="e2e-ci-$(head /dev/urandom | tr -dc a-z0-9 | head -c 13 ; echo '')"
+      helm upgrade --install $${E2E_DEPLOYMENT} --set service.type='LoadBalancer' --wait /workspace/helm-salus-e2e
       /usr/bin/python3 /workspace/monplat-k8s-env/scripts/e2e-deploy.py ${_SALUS_APP} \
           --namespace ${_APP_NAMESPACE} \
-          --endpoint "http://$(kubectl get svc e2e-ci -o jsonpath='{.status.loadBalancer.ingress[0].ip}')"
-      helm del e2e-ci
+          --endpoint "http://$(kubectl get svc $${E2E_DEPLOYMENT} -o jsonpath='{.status.loadBalancer.ingress[0].ip}')"
+      helm del $${E2E_DEPLOYMENT}
     env:
     - 'CLOUDSDK_COMPUTE_ZONE=${_CLOUDSDK_COMPUTE_ZONE}'
     - 'CLOUDSDK_COMPUTE_REGION=${_CLOUDSDK_COMPUTE_REGION}'
