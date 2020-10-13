@@ -43,7 +43,19 @@ public class ConfigInstructionsBuilder {
   public static final String LABEL_RESOURCE = "resource_id";
   public static final String LABEL_MONITOR_ID = "monitor_id";
   public static final String LABEL_MONITOR_TYPE = "monitor_type";
-  public static final String LABEL_ZONE = "monitoring_zone";
+  public static final String LABEL_MONITOR_SCOPE = "monitor_selector_scope";
+  public static final String LABEL_ZONE = "monitoring_zone_id";
+  public static final String LABEL_ENVOY_ID = "envoy_id";
+
+  public static final List<String> SYSTEM_METADATA_KEYS = List.of(
+      LABEL_TARGET_TENANT,
+      LABEL_RESOURCE,
+      LABEL_MONITOR_ID,
+      LABEL_MONITOR_TYPE,
+      LABEL_MONITOR_SCOPE,
+      LABEL_ZONE,
+      LABEL_ENVOY_ID);
+
   private HashMap<AgentType, EnvoyInstructionConfigure.Builder> buildersByAgentType = new LinkedHashMap<>();
 
   public static String buildConfiguredMonitorId(BoundMonitorDTO boundMonitor) {
@@ -81,6 +93,7 @@ public class ConfigInstructionsBuilder {
     if (!operationType.equals(OperationType.DELETE)) {
       opBuilder.putExtraLabels(LABEL_MONITOR_ID, boundMonitor.getMonitorId().toString());
       opBuilder.putExtraLabels(LABEL_MONITOR_TYPE, boundMonitor.getMonitorType().toString());
+      opBuilder.putExtraLabels(LABEL_MONITOR_SCOPE, boundMonitor.getSelectorScope().toString());
 
       if (isRemoteMonitor(boundMonitor)) {
         opBuilder.putExtraLabels(LABEL_TARGET_TENANT, boundMonitor.getTenantId());

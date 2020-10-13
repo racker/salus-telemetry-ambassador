@@ -8,6 +8,7 @@
   },
   "monitoringSystem": "SALUS",
   "systemMetadata": {
+    "resource_id": "r-other",
     "envoy_id": "envoy-1"
   },
   "metrics": [{
